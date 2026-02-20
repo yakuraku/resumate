@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from email.utils import formatdate
+import hashlib
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
@@ -142,6 +145,7 @@ async def tailor_resume(
 
 @router.get("/{resume_id}/pdf")
 async def get_resume_pdf(
+    request: Request,
     resume_id: str,
     version_id: Optional[str] = None,
     db: AsyncSession = Depends(get_db)
@@ -186,14 +190,34 @@ async def get_resume_pdf(
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found after render")
 
+    # --- ETag / Last-Modified caching ---
+    stat = output_path.stat()
+    file_mtime = stat.st_mtime
+    etag = f'"{hashlib.md5(f"{output_path}{file_mtime}".encode()).hexdigest()}"'
+    last_modified = formatdate(file_mtime, usegmt=True)
+
+    if_none_match = request.headers.get("if-none-match")
+    if_modified_since = request.headers.get("if-modified-since")
+
+    if if_none_match and if_none_match == etag:
+        return Response(status_code=304, headers={"ETag": etag, "Last-Modified": last_modified})
+    if if_modified_since and not if_none_match:
+        from email.utils import parsedate_to_datetime
+        try:
+            client_dt = parsedate_to_datetime(if_modified_since).timestamp()
+            if file_mtime <= client_dt:
+                return Response(status_code=304, headers={"ETag": etag, "Last-Modified": last_modified})
+        except Exception:
+            pass
+
     return FileResponse(
         str(output_path),
         media_type="application/pdf",
         content_disposition_type="inline",
         filename=f"resume_{resume_id}.pdf",
         headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
+            "Cache-Control": "no-cache",
+            "ETag": etag,
+            "Last-Modified": last_modified,
         }
     )
