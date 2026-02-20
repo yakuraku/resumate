@@ -185,6 +185,22 @@ class ResumeService:
             raise HTTPException(status_code=404, detail="Version not found")
         return version_obj
 
+    async def delete_version(self, db: AsyncSession, resume_id: str, version_id: str) -> tuple[str | None, int | None]:
+        """Delete a non-active version. Returns (pdf_path, version_number) for file cleanup by the caller."""
+        resume = await self.get_resume_by_id(db, resume_id)
+        target = next((v for v in resume.versions if v.id == version_id), None)
+        if not target:
+            raise HTTPException(status_code=404, detail="Version not found")
+        if target.is_active:
+            raise HTTPException(status_code=400, detail="Cannot delete the active version")
+        if len(resume.versions) <= 1:
+            raise HTTPException(status_code=400, detail="Cannot delete the only version")
+        pdf_path = target.pdf_path
+        version_number = target.version_number
+        await db.delete(target)
+        await db.commit()
+        return pdf_path, version_number
+
     async def tailor_resume(self, db: AsyncSession, resume_id: str) -> Resume:
         """Tailors the resume using the LLM. Creates a new version with source=ai_tailored."""
         stmt = select(Resume).where(Resume.id == resume_id).options(

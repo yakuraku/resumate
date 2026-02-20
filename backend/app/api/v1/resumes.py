@@ -123,6 +123,63 @@ async def get_resume_version_content(
 ):
     return await resume_service.get_version(db, resume_id, version)
 
+@router.delete("/{resume_id}/versions/{version_id}", status_code=204)
+async def delete_version(
+    resume_id: str,
+    version_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a non-active version and its associated PDF file from disk."""
+    pdf_path_str, version_number = await resume_service.delete_version(db, resume_id, version_id)
+
+    # Delete the version-specific PDF if it exists
+    if pdf_path_str:
+        Path(pdf_path_str).unlink(missing_ok=True)
+    else:
+        # Fall back to the deterministic path in case pdf_path was never recorded
+        fallback = _resume_output_dir(resume_id) / f"resume_{resume_id}_v{version_number}.pdf"
+        fallback.unlink(missing_ok=True)
+
+@router.post("/cleanup-orphan-pdfs")
+async def cleanup_orphan_pdfs(db: AsyncSession = Depends(get_db)):
+    """Delete PDF files on disk that have no corresponding version in the DB.
+
+    Scans every resume subdirectory in tailored_resumes/ and removes any
+    _v{n}.pdf file whose version_number does not exist in resume_versions.
+    Returns a summary of what was deleted.
+    """
+    base = get_tailored_resumes_dir()
+    if not base.exists():
+        return {"deleted": [], "errors": []}
+
+    # Load all (resume_id, version_number) pairs that exist in DB
+    result = await db.execute(select(ResumeVersion.resume_id, ResumeVersion.version_number))
+    valid_pairs: set[tuple[str, int]] = {(str(row[0]), row[1]) for row in result.all()}
+
+    deleted: list[str] = []
+    errors: list[str] = []
+
+    import re
+    version_pdf_pattern = re.compile(r"^resume_(.+)_v(\d+)\.pdf$")
+
+    for resume_dir in base.iterdir():
+        if not resume_dir.is_dir():
+            continue
+        resume_id = resume_dir.name
+        for pdf_file in resume_dir.glob("*_v*.pdf"):
+            m = version_pdf_pattern.match(pdf_file.name)
+            if not m:
+                continue
+            version_number = int(m.group(2))
+            if (resume_id, version_number) not in valid_pairs:
+                try:
+                    pdf_file.unlink()
+                    deleted.append(str(pdf_file))
+                except Exception as e:
+                    errors.append(f"{pdf_file}: {e}")
+
+    return {"deleted": deleted, "errors": errors}
+
 @router.post("/{resume_id}/tailor", response_model=ResumeRead)
 async def tailor_resume(
     resume_id: str,
