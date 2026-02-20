@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List, Optional
 
 from app.database import get_db
+from app.models.resume import ResumeVersion
 from app.schemas.resume import ResumeRead, ResumeUpdate, ResumeVersionRead, ResumeVersionCreate
 from app.services.resume_service import resume_service
 from app.services.rendercv_service import rendercv_service
@@ -19,6 +22,16 @@ def _resume_output_dir(resume_id: str) -> Path:
 
 def _stale_pdf_path(resume_id: str) -> Path:
     return _resume_output_dir(resume_id) / f"resume_{resume_id}.pdf"
+
+
+async def _record_pdf_render(db: AsyncSession, version_id: str, pdf_path: Path) -> None:
+    """Persist pdf_path and pdf_rendered_at on the version row after a successful render."""
+    result = await db.execute(select(ResumeVersion).where(ResumeVersion.id == version_id))
+    version = result.scalar_one_or_none()
+    if version:
+        version.pdf_path = str(pdf_path)
+        version.pdf_rendered_at = datetime.now(timezone.utc)
+        await db.commit()
 
 
 @router.get("", response_model=List[ResumeRead])
@@ -118,7 +131,11 @@ async def tailor_resume(
     output_path = output_dir / f"resume_{resume_id}.pdf"
     print(f"[PDF] Re-rendering after tailor for {resume_id}...")
     success, msg = await rendercv_service.render_yaml_to_pdf(tailored.yaml_content, output_path)
-    if not success:
+    if success:
+        active_version = next((v for v in tailored.versions if v.is_active), None)
+        if active_version:
+            await _record_pdf_render(db, active_version.id, output_path)
+    else:
         print(f"[PDF] Render warning after tailor: {msg[:200]}")
 
     return tailored
@@ -153,6 +170,7 @@ async def get_resume_pdf(
             yaml_content = target_version.yaml_content
             output_path = output_dir / f"resume_{resume_id}_v{target_version.version_number}.pdf"
     else:
+        target_version = next((v for v in resume.versions if v.is_active), None)
         yaml_content = resume.yaml_content
         output_path = output_dir / f"resume_{resume_id}.pdf"
 
@@ -162,6 +180,8 @@ async def get_resume_pdf(
         if not success:
             print(f"[PDF] Render failed: {msg[:200]}")
             raise HTTPException(status_code=422, detail=f"RenderCV failed: {msg[:500]}")
+        if target_version:
+            await _record_pdf_render(db, target_version.id, output_path)
 
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found after render")
