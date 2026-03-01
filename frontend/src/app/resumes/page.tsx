@@ -115,8 +115,8 @@ function ThreeDotMenu({ options, disabled }: { options: MenuOption[]; disabled?:
                 opt.disabled
                   ? "text-muted-foreground cursor-not-allowed opacity-50"
                   : opt.variant === "destructive"
-                  ? "text-destructive hover:bg-destructive/10"
-                  : "text-foreground hover:bg-muted"
+                    ? "text-destructive hover:bg-destructive/10"
+                    : "text-foreground hover:bg-muted"
               )}
             >
               {opt.label}
@@ -325,7 +325,7 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
   return (
     <>
       <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-        <DialogContent className="max-w-[98vw] w-[98vw] h-[95vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogContent hideCloseButton className="max-w-[98vw] sm:max-w-[98vw] w-[98vw] h-[95vh] flex flex-col p-0 gap-0 overflow-hidden">
           {/* Top bar */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
             <div className="flex items-center gap-3 min-w-0">
