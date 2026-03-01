@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
-import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings } from "lucide-react";
+import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User } from "lucide-react";
 import { ApplicationService } from "@/services/application.service";
 import { CreateApplicationModal } from "@/components/applications/CreateApplicationModal";
 import { ApplicationResponse, ApplicationStatus } from "@/types/application";
@@ -230,6 +230,13 @@ export default function DashboardPage() {
                             >
                                 <ScrollText size={13} />
                                 Resumes
+                            </Link>
+                            <Link
+                                href="/context"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                            >
+                                <User size={13} />
+                                My Context
                             </Link>
                             <Link
                                 href="/settings"
