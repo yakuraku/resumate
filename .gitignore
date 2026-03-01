@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+backend/.venv
+backend/venv
+venv/
+
+# Build outputs
+.next/
+frontend/.next/
+dist/
+build/
+coverage/
+*.egg-info/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Databases
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Generated / runtime data
+data/resumes/
+tailored_resumes/
+temp/
+
+# Test / scratch artifacts
+test.pdf
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Claude CLI internals
+.claude/
+.agent/

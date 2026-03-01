@@ -223,7 +223,12 @@ class ResumeService:
         original_yaml = resume.yaml_content
         job_description = resume.application.job_description
 
-        tailored_yaml = await tailor_service.tailor_resume(original_yaml, job_description, rules=rules)
+        from app.services.prompts import get_active_prompt
+        active_system_prompt = await get_active_prompt(db, "resume_tailoring")
+
+        tailored_yaml = await tailor_service.tailor_resume(
+            original_yaml, job_description, rules=rules, system_prompt=active_system_prompt
+        )
 
         # Deactivate all existing versions
         versions_stmt = select(ResumeVersion).where(ResumeVersion.resume_id == resume.id)

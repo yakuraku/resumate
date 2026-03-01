@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Account Settings - ResuMate</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2b6cee",
+                        "background-light": "#ffffff",
+                        "background-dark": "#0a0a0a","surface-dark": "#111111", 
+                        "border-dark": "#333333",
+                        "subtle-border": "#eaeaea",
+                        "subtle-border-dark": "#222222",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .tab-active {
+                @apply text-slate-900 dark:text-white border-b-2 border-primary;
+            }
+            .tab-inactive {
+                @apply text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border-b-2 border-transparent;
+            }
+            .section-divider {
+                @apply border-b border-subtle-border dark:border-subtle-border-dark py-10 first:pt-0 last:border-0;
+            }
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased min-h-screen flex flex-col">
+<header class="sticky top-0 z-50 w-full border-b border-subtle-border dark:border-subtle-border-dark bg-white/80 dark:bg-background-dark/80 backdrop-blur-md">
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+<div class="flex h-16 items-center justify-between gap-4">
+<div class="flex items-center gap-2">
+<div class="flex items-center justify-center size-8 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900">
+<span class="material-symbols-outlined text-xl">description</span>
+</div>
+<span class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">ResuMate</span>
+</div>
+<nav class="hidden md:flex items-center gap-6">
+<a class="text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" href="#">Dashboard</a>
+<a class="text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" href="#">Jobs</a>
+<a class="text-sm font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white transition-colors" href="#">Interview Prep</a>
+</nav>
+<div class="flex items-center gap-4">
+<div class="h-8 w-8 rounded-full bg-cover bg-center ring-1 ring-slate-200 dark:ring-border-dark cursor-pointer" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDIDj37L1VlwEYi5ECe69u24XM8Yob6uVyOCt2ZxYALWS1OOdyDugQNFklCXH5igOwLzPl72bifc8J6i_lbROlR1TAqv3aMSa5uaGF4L0qWs94kq2Lmh-EIPdWr3JJu0f4iZiCGjZ2VYlhersnGVFlLeg-yvmDYD38Us84G3wWONi15WaQSQSylZ4bpSxH_-H_-qCRa_FbT0V9FWRjzhtmw8opK9anyMoqTA32ZQPK-Q_w0M6b-Pc1Yq5zxIQhxZxKAnNKHk8N6jno');">
+</div>
+</div>
+</div>
+</div>
+</header>
+<div class="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16">
+<div class="mb-10">
+<h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Settings</h1>
+<p class="text-slate-500 dark:text-slate-400 mt-2 text-lg">Manage your workspace preferences and AI configurations.</p>
+</div>
+<div class="border-b border-subtle-border dark:border-subtle-border-dark mb-10 overflow-x-auto">
+<nav aria-label="Tabs" class="flex gap-8">
+<a class="tab-inactive px-1 pb-4 text-sm font-medium whitespace-nowrap" href="#">
+                    General
+                </a>
+<a class="tab-active px-1 pb-4 text-sm font-medium whitespace-nowrap" href="#">
+                    AI &amp; Resume
+                </a>
+<a class="tab-inactive px-1 pb-4 text-sm font-medium whitespace-nowrap" href="#">
+                    Data
+                </a>
+<a class="tab-inactive px-1 pb-4 text-sm font-medium whitespace-nowrap" href="#">
+                    Developer
+                </a>
+</nav>
+</div>
+<div class="space-y-2">
+<section class="section-divider flex flex-col md:flex-row md:gap-12 gap-6">
+<div class="md:w-1/3">
+<h3 class="text-base font-semibold text-slate-900 dark:text-white">LLM Provider</h3>
+<p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Select the AI model used for resume generation.</p>
+</div>
+<div class="md:w-2/3 space-y-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<label class="relative flex cursor-pointer rounded-lg border border-subtle-border dark:border-subtle-border-dark bg-white dark:bg-surface-dark p-4 shadow-sm focus:outline-none hover:border-primary dark:hover:border-primary transition-colors">
+<input checked="" class="sr-only" name="llm-provider" type="radio" value="openai"/>
+<span class="flex flex-1">
+<span class="flex flex-col">
+<span class="block text-sm font-medium text-slate-900 dark:text-white">OpenAI GPT-4</span>
+<span class="mt-1 flex items-center text-xs text-slate-500 dark:text-slate-400">Best reasoning capability</span>
+</span>
+</span>
+<span aria-hidden="true" class="material-symbols-outlined text-primary">check_circle</span>
+</label>
+<label class="relative flex cursor-pointer rounded-lg border border-subtle-border dark:border-subtle-border-dark bg-white dark:bg-surface-dark p-4 shadow-sm focus:outline-none hover:border-slate-300 dark:hover:border-slate-600 transition-colors">
+<input class="sr-only" name="llm-provider" type="radio" value="anthropic"/>
+<span class="flex flex-1">
+<span class="flex flex-col">
+<span class="block text-sm font-medium text-slate-900 dark:text-white">Claude 3.5 Sonnet</span>
+<span class="mt-1 flex items-center text-xs text-slate-500 dark:text-slate-400">Natural sounding prose</span>
+</span>
+</span>
+<span aria-hidden="true" class="material-symbols-outlined text-transparent">check_circle</span>
+</label>
+</div>
+<div>
+<label class="block text-sm font-medium leading-6 text-slate-900 dark:text-white" for="api-key">API Key</label>
+<div class="relative mt-2 rounded-md shadow-sm">
+<input class="block w-full rounded-md border-0 py-1.5 text-slate-900 dark:text-white dark:bg-surface-dark shadow-sm ring-1 ring-inset ring-subtle-border dark:ring-subtle-border-dark placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" id="api-key" name="api-key" placeholder="sk-..." type="password" value="sk-xxxxxxxxxxxxxxxxxxxxxxxx"/>
+</div>
+</div>
+</div>
+</section>
+<section class="section-divider flex flex-col md:flex-row md:gap-12 gap-6">
+<div class="md:w-1/3">
+<h3 class="text-base font-semibold text-slate-900 dark:text-white">Resume Defaults</h3>
+<p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Set default formatting for new documents.</p>
+</div>
+<div class="md:w-2/3 space-y-6">
+<div class="grid grid-cols-1 gap-x-6 gap-y-8 sm:grid-cols-6">
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-slate-900 dark:text-white" for="font-family">Font Family</label>
+<div class="mt-2">
+<select class="block w-full rounded-md border-0 py-1.5 text-slate-900 dark:text-white dark:bg-surface-dark shadow-sm ring-1 ring-inset ring-subtle-border dark:ring-subtle-border-dark focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" id="font-family" name="font-family">
+<option>Inter</option>
+<option>Times New Roman</option>
+<option>Helvetica</option>
+<option>Garamond</option>
+</select>
+</div>
+</div>
+<div class="sm:col-span-3">
+<label class="block text-sm font-medium leading-6 text-slate-900 dark:text-white" for="page-size">Page Size</label>
+<div class="mt-2">
+<select class="block w-full rounded-md border-0 py-1.5 text-slate-900 dark:text-white dark:bg-surface-dark shadow-sm ring-1 ring-inset ring-subtle-border dark:ring-subtle-border-dark focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6" id="page-size" name="page-size">
+<option>Letter (US)</option>
+<option>A4</option>
+</select>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between py-4">
+<span class="flex flex-grow flex-col">
+<span class="text-sm font-medium leading-6 text-slate-900 dark:text-white" id="availability-label">Include Photo</span>
+<span class="text-sm text-slate-500 dark:text-slate-400" id="availability-description">Automatically add your profile photo to header.</span>
+</span>
+<button aria-checked="false" aria-describedby="availability-description" aria-labelledby="availability-label" class="bg-gray-200 dark:bg-white/10 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" role="switch" type="button">
+<span aria-hidden="true" class="translate-x-0 pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"></span>
+</button>
+</div>
+</div>
+</section>
+<section class="section-divider flex flex-col md:flex-row md:gap-12 gap-6">
+<div class="md:w-1/3">
+<h3 class="text-base font-semibold text-slate-900 dark:text-white">Global Rules</h3>
+<p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Instructions that apply to every resume generation.</p>
+</div>
+<div class="md:w-2/3">
+<div class="relative">
+<div class="absolute top-3 left-3 flex h-6 w-6 items-center justify-center rounded-sm bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+<span class="material-symbols-outlined text-sm">auto_awesome</span>
+</div>
+<textarea class="block w-full rounded-md border-0 py-3 pl-12 pr-4 text-slate-900 dark:text-white dark:bg-surface-dark shadow-sm ring-1 ring-inset ring-subtle-border dark:ring-subtle-border-dark placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary sm:text-sm sm:leading-6 font-mono text-sm" id="global-rules" name="global-rules" placeholder="e.g. Always emphasize quantitative results. Never use the word 'utilized'." rows="6">Always use active voice.
+Focus on achievements over responsibilities.
+Ensure dates are in reverse chronological order.</textarea>
+</div>
+<p class="mt-2 text-xs text-slate-500 dark:text-slate-500 text-right">Markdown supported.</p>
+</div>
+</section>
+<div class="flex items-center justify-end gap-x-4 py-4 pt-10">
+<button class="text-sm font-semibold leading-6 text-slate-900 dark:text-white hover:text-slate-600 dark:hover:text-slate-300" type="button">Cancel</button>
+<button class="rounded-md bg-slate-900 dark:bg-white px-5 py-2 text-sm font-semibold text-white dark:text-black shadow-sm hover:bg-slate-700 dark:hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-600" type="submit">Save Changes</button>
+</div>
+</div>
+</div>
+
+</body></html>

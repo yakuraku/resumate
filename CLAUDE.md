@@ -1,0 +1,1 @@
+1. GPT-5 mini is a reasoning model — when using the Chat Completions API, always use `max_completion_tokens` (not `max_tokens`) with a minimum value of 4000 to leave room for reasoning tokens, never pass `temperature`, and always handle `choices[0].message.content` being `null` or empty since reasoning models can consume the entire output budget on reasoning tokens.

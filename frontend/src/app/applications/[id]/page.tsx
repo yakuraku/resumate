@@ -1,36 +1,38 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CommandCenter } from "@/components/layout/CommandCenter";
 import { ApplicationService } from "@/services/application.service";
-import { ApplicationResponse } from "@/types/application";
+import { ApplicationResponse, ApplicationStatus } from "@/types/application";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import {
     ArrowLeft, ExternalLink, Briefcase, FileText, Download, BrainCircuit,
     Loader2, MessageSquare, AlertTriangle, RefreshCw,
-    Plus, Trash2, HelpCircle, PenLine, Bot, RotateCcw,
-    Minimize2, Target, Award, ThumbsUp, X
+    HelpCircle, RotateCcw, ThumbsUp, X, ChevronDown, Check, Info,
+    BookOpen, Star
 } from "lucide-react";
+import { ResumeTemplateService } from "@/services/resume-template.service";
+import type { ResumeTemplate } from "@/types/resume-template";
+import { cn } from "@/lib/utils";
+import { StatusBadge } from "@/components/applications/StatusBadge";
 import { ResumeService } from "@/services/resume.service";
 import { Resume, ResumeVersion } from "@/types/resume";
 import { ResumeEditor } from "@/components/resume/ResumeEditor";
 import { InterviewDashboard } from "@/components/interview/InterviewDashboard";
 import { VersionBar } from "@/components/resume/VersionBar";
 import { TailorRulesPanel } from "@/components/resume/TailorRulesPanel";
-import { QuestionsService, ApplicationQuestion } from "@/services/questions.service";
 import { CopyButton } from "@/components/shared/CopyButton";
 import { SaveIndicator } from "@/components/shared/SaveIndicator";
 import type { SaveStatus } from "@/components/shared/SaveIndicator";
-import { MarkdownContent } from "@/components/shared/MarkdownContent";
-import { SkeletonParagraph, SkeletonCard } from "@/components/shared/Skeletons";
 import { useAutosave } from "@/hooks/useAutosave";
+import { QAAssistant } from "@/components/qa/QAAssistant";
+import { CredentialCard } from "@/components/credentials/CredentialCard";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
 
@@ -43,13 +45,6 @@ interface Toast {
     message: string;
     variant: "default" | "error";
 }
-
-// Refine instruction presets
-const REFINE_PRESETS = [
-    { label: "Make Shorter", icon: Minimize2, instruction: "Make this answer shorter and more concise while keeping the key points." },
-    { label: "More Specific", icon: Target, instruction: "Make this answer more specific with concrete examples and measurable outcomes." },
-    { label: "More Professional", icon: Award, instruction: "Rewrite this answer with a more professional, polished tone suitable for a job application." },
-];
 
 export default function ApplicationWorkspacePage({ params }: PageProps) {
     const { id } = use(params);
@@ -87,16 +82,30 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     // Toast notifications
     const [toasts, setToasts] = useState<Toast[]>([]);
 
-    // Q&A State
-    const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
-    const [questionsLoading, setQuestionsLoading] = useState(false);
-    const [newQuestionText, setNewQuestionText] = useState("");
-    const [addingQuestion, setAddingQuestion] = useState(false);
-    const [generatingAnswerFor, setGeneratingAnswerFor] = useState<string | null>(null);
-    const [refiningAnswerFor, setRefiningAnswerFor] = useState<string | null>(null);
-    const [editingAnswerFor, setEditingAnswerFor] = useState<string | null>(null);
-    const [editingAnswerText, setEditingAnswerText] = useState("");
-    const [savingAnswerFor, setSavingAnswerFor] = useState<string | null>(null);
+    // Status management state
+    const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+    const [showAppliedConfirm, setShowAppliedConfirm] = useState(false);
+    const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+    const [updatingStatus, setUpdatingStatus] = useState(false);
+    const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Template selector state
+    const [templates, setTemplates] = useState<ResumeTemplate[]>([]);
+    const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+    const [switchingTemplate, setSwitchingTemplate] = useState(false);
+    const templateDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Save as template (from tailor bar) state
+    const [tailoredYaml, setTailoredYaml] = useState<string | null>(null);
+    const [showSaveAsTemplateDialog, setShowSaveAsTemplateDialog] = useState(false);
+    const [saveAsTemplateName, setSaveAsTemplateName] = useState("");
+    const [savingAsTemplate, setSavingAsTemplate] = useState(false);
+
+    // Frozen resume edit mode state
+    const [frozenEditMode, setFrozenEditMode] = useState(false);
+    const [showSaveFrozenDialog, setShowSaveFrozenDialog] = useState(false);
+    const [frozenSaveName, setFrozenSaveName] = useState("");
+    const [savingFrozen, setSavingFrozen] = useState(false);
 
     // Derived: is viewing the active version?
     const versions = resume?.versions ?? [];
@@ -122,6 +131,53 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         setPreviewHash(Date.now());
     }, []);
 
+    // Close status dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+                setShowStatusDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    // Close template dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (templateDropdownRef.current && !templateDropdownRef.current.contains(e.target as Node)) {
+                setShowTemplateDropdown(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    const doStatusUpdate = useCallback(async (status: string) => {
+        if (!application) return;
+        setUpdatingStatus(true);
+        try {
+            const updated = await ApplicationService.updateStatus(application.id, status);
+            setApplication(updated);
+            showToast(`Status updated to ${status}`);
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to update status", "error");
+        } finally {
+            setUpdatingStatus(false);
+        }
+    }, [application, showToast]);
+
+    const handleStatusChange = (newStatus: string) => {
+        setShowStatusDropdown(false);
+        if (newStatus === ApplicationStatus.APPLIED && application?.status !== ApplicationStatus.APPLIED) {
+            setPendingStatus(newStatus);
+            setShowAppliedConfirm(true);
+            return;
+        }
+        doStatusUpdate(newStatus);
+    };
+
     // ── JD Autosave ────────────────────────────────────────────────────────────
     const saveJdSilently = useCallback(
         async (jd: string) => {
@@ -139,29 +195,19 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         enabled: isEditingJd,
     });
 
-    // ── Q&A Answer Autosave ───────────────────────────────────────────────────
-    const saveAnswerSilently = useCallback(
-        async (text: string) => {
-            if (!editingAnswerFor) return;
-            const updated = await QuestionsService.update(editingAnswerFor, { answer_text: text });
-            setQuestions((prev) => prev.map((q) => (q.id === editingAnswerFor ? updated : q)));
-        },
-        [editingAnswerFor]
-    );
-
-    const { saveStatus: answerAutoSaveStatus } = useAutosave({
-        value: editingAnswerText,
-        onSave: saveAnswerSilently,
-        debounceMs: 1500,
-        enabled: editingAnswerFor !== null,
-    });
-
     useEffect(() => {
         const loadData = async () => {
             try {
                 const appData = await ApplicationService.getById(id);
                 setApplication(appData);
                 setEditedJd(appData.job_description || "");
+
+                try {
+                    const tmplData = await ResumeTemplateService.getAll();
+                    setTemplates(tmplData);
+                } catch (e) {
+                    console.log("Could not load templates", e);
+                }
 
                 try {
                     const resumeData = await ResumeService.getByApplicationId(id);
@@ -193,19 +239,6 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         };
         loadData();
     }, [id, router]);
-
-    // Load Q&A questions
-    const loadQuestions = useCallback(async () => {
-        setQuestionsLoading(true);
-        try {
-            const data = await QuestionsService.getByApplication(id);
-            setQuestions(data);
-        } catch (e) {
-            console.error("Failed to load questions", e);
-        } finally {
-            setQuestionsLoading(false);
-        }
-    }, [id]);
 
     // Core YAML auto-save function
     const saveToBackend = useCallback(
@@ -291,6 +324,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
             if (newActive) {
                 setViewingVersionId(newActive.id);
                 setDisplayYaml(newActive.yaml_content);
+                setTailoredYaml(newActive.yaml_content);
             }
             triggerPdfRefresh();
             showToast("Resume tailored successfully");
@@ -408,74 +442,91 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         }
     };
 
-    // Q&A handlers
-    const handleAddQuestion = async () => {
-        if (!newQuestionText.trim()) return;
-        setAddingQuestion(true);
+    const handleTemplateSwitch = async (template: ResumeTemplate) => {
+        setShowTemplateDropdown(false);
+        if (!application) return;
+
+        const isDraft = application.status === ApplicationStatus.DRAFT;
+        if (!isDraft) {
+            showToast("Resume template can only be switched for draft applications", "error");
+            return;
+        }
+
+        setSwitchingTemplate(true);
         try {
-            const created = await QuestionsService.create({
-                application_id: id,
-                question_text: newQuestionText.trim(),
+            const updated = await ApplicationService.updateResumeTemplate(application.id, template.id);
+            setApplication(updated);
+            setDisplayYaml(template.yaml_content);
+            setDebouncedValue(template.yaml_content);
+            triggerPdfRefresh();
+            showToast(`Switched to "${template.name}"`);
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to switch template", "error");
+        } finally {
+            setSwitchingTemplate(false);
+        }
+    };
+
+    const openSaveAsTemplateDialog = () => {
+        const suggestion = [application?.role, application?.company]
+            .filter(Boolean)
+            .join(" - ");
+        setSaveAsTemplateName(suggestion || "");
+        setShowSaveAsTemplateDialog(true);
+    };
+
+    const handleSaveAsTemplate = async () => {
+        if (!saveAsTemplateName.trim() || !tailoredYaml || !application) return;
+        if (saveAsTemplateName.trim().toLowerCase() === "master") {
+            showToast("Cannot use 'Master' as a template name", "error");
+            return;
+        }
+        setSavingAsTemplate(true);
+        try {
+            const newTemplate = await ResumeTemplateService.create({
+                name: saveAsTemplateName.trim(),
+                yaml_content: tailoredYaml
             });
-            setQuestions((prev) => [...prev, created]);
-            setNewQuestionText("");
-        } catch (e) {
-            showToast("Failed to add question", "error");
+            const updatedApp = await ApplicationService.updateResumeTemplate(application.id, newTemplate.id);
+            setApplication(updatedApp);
+            setTemplates(prev => [...prev, newTemplate]);
+            setShowSaveAsTemplateDialog(false);
+            setShowTailorBar(false);
+            setTailoredYaml(null);
+            showToast(`Resume saved as "${newTemplate.name}"`);
+        } catch (e: unknown) {
+            console.error(e);
+            const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to save resume";
+            showToast(msg, "error");
         } finally {
-            setAddingQuestion(false);
+            setSavingAsTemplate(false);
         }
     };
 
-    const handleGenerateAnswer = async (questionId: string) => {
-        setGeneratingAnswerFor(questionId);
-        try {
-            const updated = await QuestionsService.generateAnswer(questionId);
-            setQuestions((prev) => prev.map((q) => (q.id === questionId ? updated : q)));
-            showToast("Answer generated");
-        } catch (e) {
-            showToast("Failed to generate answer", "error");
-        } finally {
-            setGeneratingAnswerFor(null);
+    const handleSaveFrozenEdit = async () => {
+        if (!frozenSaveName.trim() || !application) return;
+        if (frozenSaveName.trim().toLowerCase() === "master") {
+            showToast("Cannot use 'Master' as a name", "error");
+            return;
         }
-    };
-
-    const handleRefineAnswer = async (questionId: string, instruction: string) => {
-        setRefiningAnswerFor(questionId);
+        setSavingFrozen(true);
         try {
-            const updated = await QuestionsService.refineAnswer(questionId, instruction);
-            setQuestions((prev) => prev.map((q) => (q.id === questionId ? updated : q)));
-        } catch (e) {
-            showToast("Failed to refine answer", "error");
+            const newTemplate = await ResumeTemplateService.create({
+                name: frozenSaveName.trim(),
+                yaml_content: displayYaml
+            });
+            setTemplates(prev => [...prev, newTemplate]);
+            setShowSaveFrozenDialog(false);
+            setFrozenEditMode(false);
+            setDisplayYaml(application.resume_snapshot_yaml!);
+            showToast(`Saved as "${newTemplate.name}" — snapshot unchanged`);
+        } catch (e: unknown) {
+            console.error(e);
+            const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Failed to save";
+            showToast(msg, "error");
         } finally {
-            setRefiningAnswerFor(null);
-        }
-    };
-
-    const handleDeleteQuestion = async (questionId: string) => {
-        try {
-            await QuestionsService.delete(questionId);
-            setQuestions((prev) => prev.filter((q) => q.id !== questionId));
-        } catch (e) {
-            showToast("Failed to delete question", "error");
-        }
-    };
-
-    const handleStartEditAnswer = (question: ApplicationQuestion) => {
-        setEditingAnswerFor(question.id);
-        setEditingAnswerText(question.answer_text || "");
-    };
-
-    const handleSaveAnswer = async (questionId: string) => {
-        setSavingAnswerFor(questionId);
-        try {
-            const updated = await QuestionsService.update(questionId, { answer_text: editingAnswerText });
-            setQuestions((prev) => prev.map((q) => (q.id === questionId ? updated : q)));
-            setEditingAnswerFor(null);
-            showToast("Answer saved");
-        } catch (e) {
-            showToast("Failed to save answer", "error");
-        } finally {
-            setSavingAnswerFor(null);
+            setSavingFrozen(false);
         }
     };
 
@@ -501,8 +552,8 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     }
 
     return (
-        <CommandCenter>
-            <div className="flex flex-col space-y-6 h-[calc(100vh-8rem)]">
+        <CommandCenter fullHeight>
+            <div className="flex flex-col space-y-6 h-full">
                 {/* Header Section */}
                 <div className="flex items-center justify-between border-b pb-4">
                     <div className="flex items-center gap-4">
@@ -514,7 +565,40 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                             <div className="flex items-center gap-2 text-muted-foreground">
                                 <span className="font-medium text-foreground">{application.company}</span>
                                 <span>•</span>
-                                <Badge variant="outline" className="uppercase text-xs">{application.status}</Badge>
+                                {/* Clickable status selector */}
+                                <div className="relative" ref={statusDropdownRef}>
+                                    <button
+                                        onClick={() => setShowStatusDropdown((v) => !v)}
+                                        className="flex items-center gap-1.5 text-sm rounded-md px-2 py-1 hover:bg-muted transition-colors"
+                                        aria-label="Change application status"
+                                        disabled={updatingStatus}
+                                    >
+                                        <StatusBadge status={application.status as ApplicationStatus} />
+                                        {updatingStatus
+                                            ? <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                                            : <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                                        }
+                                    </button>
+                                    {showStatusDropdown && (
+                                        <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
+                                            {Object.values(ApplicationStatus).map((status) => (
+                                                <button
+                                                    key={status}
+                                                    onClick={() => handleStatusChange(status)}
+                                                    className={cn(
+                                                        "w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center gap-2",
+                                                        status === application.status && "bg-muted/50"
+                                                    )}
+                                                >
+                                                    <StatusBadge status={status} />
+                                                    {status === application.status && (
+                                                        <Check className="h-3 w-3 ml-auto text-primary" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                                 {application.source_url && (
                                     <a
                                         href={application.source_url}
@@ -564,7 +648,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                             <TabsTrigger value="editor" className="gap-2">
                                 <FileText className="h-4 w-4" /> Resume Editor
                             </TabsTrigger>
-                            <TabsTrigger value="qa" className="gap-2" onClick={loadQuestions}>
+                            <TabsTrigger value="qa" className="gap-2">
                                 <HelpCircle className="h-4 w-4" /> Q&amp;A Assistant
                             </TabsTrigger>
                             <TabsTrigger value="interview" className="gap-2">
@@ -578,63 +662,71 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                         {/* ─── Job Context Tab ─── */}
                         <TabsContent value="job" className="m-0 h-full p-0 flex flex-col">
                             <ScrollArea className="h-full">
-                                <div className="p-6 max-w-4xl mx-auto space-y-6">
-                                    {/* Job Description Editor */}
-                                    <Card>
-                                        <CardHeader className="flex flex-row items-center justify-between">
-                                            <CardTitle>Job Description</CardTitle>
-                                            {!isEditingJd ? (
-                                                <Button variant="outline" size="sm" onClick={() => setIsEditingJd(true)}>
-                                                    Edit
-                                                </Button>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <SaveIndicator status={jdAutoSaveStatus} />
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => {
-                                                            setIsEditingJd(false);
-                                                            setEditedJd(application.job_description || "");
-                                                        }}
-                                                        disabled={savingJd}
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                    <Button size="sm" onClick={handleSaveJd} disabled={savingJd}>
-                                                        {savingJd ? <Loader2 className="h-4 w-4 animate-spin" /> : "Done"}
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </CardHeader>
-                                        <CardContent>
-                                            {isEditingJd ? (
-                                                <Textarea
-                                                    value={editedJd}
-                                                    onChange={(e) => setEditedJd(e.target.value)}
-                                                    className="min-h-[400px] font-mono text-sm"
-                                                    placeholder="Paste job description here..."
-                                                />
-                                            ) : application.job_description ? (
-                                                <div className="whitespace-pre-wrap text-sm text-foreground/80 leading-relaxed">
-                                                    {application.job_description}
-                                                </div>
-                                            ) : (
-                                                <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
-                                                    <Briefcase className="h-10 w-10 text-muted-foreground opacity-30" />
-                                                    <div>
-                                                        <p className="text-sm font-medium text-muted-foreground">No job description added yet</p>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            A job description is required to use AI tailoring.
-                                                        </p>
-                                                    </div>
-                                                    <Button variant="outline" size="sm" onClick={() => setIsEditingJd(true)}>
-                                                        Add Job Description
-                                                    </Button>
-                                                </div>
-                                            )}
-                                        </CardContent>
-                                    </Card>
+                                <div className="p-6">
+                                    <div className="flex flex-col lg:flex-row gap-6">
+                                        {/* Left column - Job Description */}
+                                        <div className="flex-1 min-w-0">
+                                            <Card>
+                                                <CardHeader className="flex flex-row items-center justify-between">
+                                                    <CardTitle>Job Description</CardTitle>
+                                                    {!isEditingJd ? (
+                                                        <Button variant="outline" size="sm" onClick={() => setIsEditingJd(true)}>
+                                                            Edit
+                                                        </Button>
+                                                    ) : (
+                                                        <div className="flex items-center gap-2">
+                                                            <SaveIndicator status={jdAutoSaveStatus} />
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => {
+                                                                    setIsEditingJd(false);
+                                                                    setEditedJd(application.job_description || "");
+                                                                }}
+                                                                disabled={savingJd}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button size="sm" onClick={handleSaveJd} disabled={savingJd}>
+                                                                {savingJd ? <Loader2 className="h-4 w-4 animate-spin" /> : "Done"}
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </CardHeader>
+                                                <CardContent>
+                                                    {isEditingJd ? (
+                                                        <Textarea
+                                                            value={editedJd}
+                                                            onChange={(e) => setEditedJd(e.target.value)}
+                                                            className="min-h-[400px] font-mono text-sm"
+                                                            placeholder="Paste job description here..."
+                                                        />
+                                                    ) : application.job_description ? (
+                                                        <div className="whitespace-pre-wrap text-sm text-foreground/80 leading-relaxed">
+                                                            {application.job_description}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-center justify-center py-10 text-center space-y-3">
+                                                            <Briefcase className="h-10 w-10 text-muted-foreground opacity-30" />
+                                                            <div>
+                                                                <p className="text-sm font-medium text-muted-foreground">No job description added yet</p>
+                                                                <p className="text-xs text-muted-foreground mt-1">
+                                                                    A job description is required to use AI tailoring.
+                                                                </p>
+                                                            </div>
+                                                            <Button variant="outline" size="sm" onClick={() => setIsEditingJd(true)}>
+                                                                Add Job Description
+                                                            </Button>
+                                                        </div>
+                                                    )}
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+                                        {/* Right column - Credentials */}
+                                        <div className="w-full lg:w-[38%]">
+                                            <CredentialCard applicationId={application.id} />
+                                        </div>
+                                    </div>
                                 </div>
                             </ScrollArea>
                         </TabsContent>
@@ -653,6 +745,60 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                         savingVersion={savingVersion}
                                     />
 
+                                    {/* Enhanced frozen resume banner */}
+                                    {application?.status !== ApplicationStatus.DRAFT && application?.resume_snapshot_yaml && (
+                                        <div className={cn(
+                                            "flex items-center justify-between px-3 py-1.5 border-b text-xs",
+                                            frozenEditMode
+                                                ? "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-400"
+                                                : "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-400"
+                                        )}>
+                                            <span className="flex items-center gap-2">
+                                                <Info className="h-3 w-3 shrink-0" />
+                                                {frozenEditMode
+                                                    ? "Edit mode — click \"Save as Resume\" to keep your changes (snapshot is unchanged)"
+                                                    : "Resume snapshot — saved when you applied. Read-only to preserve your record."
+                                                }
+                                            </span>
+                                            <div className="flex items-center gap-2 ml-2 shrink-0">
+                                                {frozenEditMode ? (
+                                                    <>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-xs px-2"
+                                                            onClick={() => {
+                                                                setFrozenEditMode(false);
+                                                                setDisplayYaml(application.resume_snapshot_yaml!);
+                                                            }}
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-6 text-xs px-2"
+                                                            onClick={() => {
+                                                                const suggestion = [application?.role, application?.company].filter(Boolean).join(" - ");
+                                                                setFrozenSaveName(suggestion || "");
+                                                                setShowSaveFrozenDialog(true);
+                                                            }}
+                                                        >
+                                                            Save as Resume
+                                                        </Button>
+                                                    </>
+                                                ) : (
+                                                    <button
+                                                        className="underline underline-offset-2 hover:opacity-80 transition-opacity"
+                                                        onClick={() => setFrozenEditMode(true)}
+                                                    >
+                                                        Edit a copy
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Floating tailor bar */}
                                     {showTailorBar && (
                                         <div className="flex items-center justify-between px-4 py-2.5 bg-green-500/10 border-b border-green-500/20 text-sm">
@@ -661,6 +807,15 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                                 Resume tailored! Happy with this version?
                                             </span>
                                             <div className="flex items-center gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-7 text-xs gap-1 border-green-500/30 text-green-700 dark:text-green-400 hover:bg-green-500/10"
+                                                    onClick={openSaveAsTemplateDialog}
+                                                >
+                                                    <FileText className="h-3 w-3" />
+                                                    Save as Resume
+                                                </Button>
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
@@ -700,9 +855,59 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                         <div className="w-1/2 h-full border-r border-border flex flex-col">
                                             {/* YAML editor toolbar */}
                                             <div className="flex items-center justify-between px-3 py-1.5 border-b bg-background/80">
-                                                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                                    YAML Editor
-                                                </span>
+                                                {/* Template selector */}
+                                                <div className="relative flex items-center gap-2" ref={templateDropdownRef}>
+                                                    <button
+                                                        onClick={() => application?.status === ApplicationStatus.DRAFT && setShowTemplateDropdown(v => !v)}
+                                                        disabled={switchingTemplate || application?.status !== ApplicationStatus.DRAFT}
+                                                        className={cn(
+                                                            "flex items-center gap-1.5 text-xs rounded px-2 py-1 transition-colors max-w-[200px]",
+                                                            application?.status === ApplicationStatus.DRAFT
+                                                                ? "hover:bg-muted cursor-pointer text-muted-foreground hover:text-foreground"
+                                                                : "cursor-default text-muted-foreground"
+                                                        )}
+                                                        aria-label="Switch resume template"
+                                                        title={application?.status !== ApplicationStatus.DRAFT ? "Template can only be switched for draft applications" : "Switch resume template"}
+                                                    >
+                                                        <BookOpen className="h-3 w-3 shrink-0" />
+                                                        <span className="truncate font-medium">
+                                                            {templates.find(t => t.id === application?.resume_template_id)?.name ?? "Master"}
+                                                        </span>
+                                                        {switchingTemplate
+                                                            ? <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+                                                            : application?.status === ApplicationStatus.DRAFT && <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                                                        }
+                                                    </button>
+
+                                                    {showTemplateDropdown && (
+                                                        <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg py-1 w-56 max-h-64 overflow-y-auto">
+                                                            {templates.length === 0 ? (
+                                                                <div className="px-3 py-2 text-xs text-muted-foreground">No templates found</div>
+                                                            ) : (
+                                                                templates.map(t => (
+                                                                    <button
+                                                                        key={t.id}
+                                                                        onClick={() => handleTemplateSwitch(t)}
+                                                                        className={cn(
+                                                                            "w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center gap-2",
+                                                                            t.id === application?.resume_template_id && "bg-muted/50"
+                                                                        )}
+                                                                    >
+                                                                        <BookOpen className="h-3 w-3 shrink-0 text-muted-foreground" />
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="flex items-center gap-1">
+                                                                                <span className="truncate font-medium">{t.name}</span>
+                                                                                {t.is_starred && <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-400 shrink-0" />}
+                                                                                {t.is_master && <span className="text-[10px] bg-primary/10 text-primary rounded px-1">Master</span>}
+                                                                            </div>
+                                                                        </div>
+                                                                        {t.id === application?.resume_template_id && <Check className="h-3 w-3 ml-auto text-primary shrink-0" />}
+                                                                    </button>
+                                                                ))
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <div className="flex items-center gap-2">
                                                     <SaveIndicator status={yamlSaveStatus} />
                                                     <CopyButton
@@ -716,7 +921,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                                 <ResumeEditor
                                                     value={displayYaml}
                                                     onChange={handleResumeChange}
-                                                    readOnly={!isViewingActive}
+                                                    readOnly={!isViewingActive || (application?.status !== ApplicationStatus.DRAFT && !frozenEditMode && !!application?.resume_snapshot_yaml)}
                                                 />
                                             </div>
                                             <TailorRulesPanel applicationId={application.id} />
@@ -827,224 +1032,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
 
                         {/* ─── Q&A Assistant Tab ─── */}
                         <TabsContent value="qa" className="m-0 h-full p-0 flex flex-col">
-                            <ScrollArea className="h-full">
-                                <div className="p-6 max-w-3xl mx-auto space-y-6">
-                                    {/* Header */}
-                                    <div>
-                                        <h2 className="text-lg font-semibold mb-1">Q&amp;A Assistant</h2>
-                                        <p className="text-sm text-muted-foreground">
-                                            Draft answers to application questions. AI uses your resume and career context to generate tailored responses.
-                                        </p>
-                                    </div>
-
-                                    {/* Add Question input */}
-                                    <Card>
-                                        <CardContent className="pt-4">
-                                            <div className="flex gap-2">
-                                                <Input
-                                                    placeholder="Paste an application question here…"
-                                                    value={newQuestionText}
-                                                    onChange={(e) => setNewQuestionText(e.target.value)}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === "Enter" && !e.shiftKey) {
-                                                            e.preventDefault();
-                                                            handleAddQuestion();
-                                                        }
-                                                    }}
-                                                    className="flex-1"
-                                                />
-                                                <Button
-                                                    onClick={handleAddQuestion}
-                                                    disabled={addingQuestion || !newQuestionText.trim()}
-                                                    className="gap-2 shrink-0"
-                                                >
-                                                    {addingQuestion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-                                                    Add
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-
-                                    {/* Loading state */}
-                                    {questionsLoading && (
-                                        <div className="space-y-3">
-                                            {[1, 2].map((i) => (
-                                                <SkeletonCard key={i} lines={4} headerHeight="h-4 w-3/4" />
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Empty state */}
-                                    {!questionsLoading && questions.length === 0 && (
-                                        <div className="flex flex-col items-center justify-center py-16 text-center space-y-4">
-                                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                                                <HelpCircle className="h-8 w-8 text-muted-foreground opacity-50" />
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold">No questions yet</h3>
-                                                <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                                                    Add questions from your job application form and let AI help you draft compelling STAR-method answers.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Question cards */}
-                                    {!questionsLoading &&
-                                        questions.map((q) => {
-                                            const isGenerating = generatingAnswerFor === q.id;
-                                            const isRefining = refiningAnswerFor === q.id;
-                                            const isEditingAnswer = editingAnswerFor === q.id;
-                                            const isSaving = savingAnswerFor === q.id;
-                                            const isAiWorking = isGenerating || isRefining;
-
-                                            return (
-                                                <Card key={q.id} className="relative">
-                                                    <CardContent className="pt-4 space-y-3">
-                                                        {/* Question text */}
-                                                        <div className="flex items-start gap-2">
-                                                            <HelpCircle className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                                            <p className="text-sm font-medium leading-relaxed flex-1">
-                                                                {q.question_text}
-                                                            </p>
-                                                            <button
-                                                                onClick={() => handleDeleteQuestion(q.id)}
-                                                                className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
-                                                                title="Delete question"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Answer area */}
-                                                        <div className="pl-6 space-y-2">
-                                                            {isAiWorking ? (
-                                                                <div className="space-y-2 rounded-md bg-muted/50 p-3 border border-border">
-                                                                    <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
-                                                                        <Bot className="h-3.5 w-3.5 animate-bounce" />
-                                                                        {isGenerating ? "Generating answer…" : "Refining answer…"}
-                                                                    </div>
-                                                                    <SkeletonParagraph lines={4} />
-                                                                </div>
-                                                            ) : isEditingAnswer ? (
-                                                                <div className="space-y-2">
-                                                                    <Textarea
-                                                                        value={editingAnswerText}
-                                                                        onChange={(e) => setEditingAnswerText(e.target.value)}
-                                                                        className="min-h-[120px] text-sm"
-                                                                        placeholder="Write your answer here…"
-                                                                    />
-                                                                    <div className="flex items-center gap-2">
-                                                                        <SaveIndicator status={answerAutoSaveStatus} />
-                                                                        <div className="flex gap-2 ml-auto">
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                onClick={() => setEditingAnswerFor(null)}
-                                                                                disabled={isSaving}
-                                                                            >
-                                                                                Done
-                                                                            </Button>
-                                                                            <Button
-                                                                                size="sm"
-                                                                                onClick={() => handleSaveAnswer(q.id)}
-                                                                                disabled={isSaving}
-                                                                            >
-                                                                                {isSaving ? (
-                                                                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                                                                ) : null}
-                                                                                Save
-                                                                            </Button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ) : q.answer_text ? (
-                                                                <div className="relative group">
-                                                                    {/* Copy button in top-right corner */}
-                                                                    <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                                                        <CopyButton text={q.answer_text} />
-                                                                        <button
-                                                                            onClick={() => handleStartEditAnswer(q)}
-                                                                            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted"
-                                                                            title="Edit answer"
-                                                                        >
-                                                                            <PenLine className="h-3.5 w-3.5" />
-                                                                        </button>
-                                                                    </div>
-                                                                    <MarkdownContent
-                                                                        content={q.answer_text}
-                                                                        className="pr-16"
-                                                                    />
-                                                                </div>
-                                                            ) : (
-                                                                <p className="text-sm text-muted-foreground italic">
-                                                                    No answer yet. Generate with AI or write your own.
-                                                                </p>
-                                                            )}
-
-                                                            {/* Footer action row */}
-                                                            {!isEditingAnswer && !isAiWorking && (
-                                                                <div className="space-y-2 pt-1">
-                                                                    {/* Primary actions */}
-                                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="gap-1.5 text-xs"
-                                                                            onClick={() => handleGenerateAnswer(q.id)}
-                                                                            disabled={isGenerating}
-                                                                        >
-                                                                            <Sparkles className="h-3 w-3" />
-                                                                            {q.answer_text ? "Regenerate" : "Generate with AI"}
-                                                                        </Button>
-                                                                        {!isEditingAnswer && (
-                                                                            <Button
-                                                                                variant="ghost"
-                                                                                size="sm"
-                                                                                className="gap-1.5 text-xs"
-                                                                                onClick={() => handleStartEditAnswer(q)}
-                                                                            >
-                                                                                <PenLine className="h-3 w-3" />
-                                                                                {q.answer_text ? "Edit" : "Write manually"}
-                                                                            </Button>
-                                                                        )}
-                                                                        {q.is_ai_generated && (
-                                                                            <Badge variant="secondary" className="text-xs gap-1 ml-auto">
-                                                                                <Bot className="h-3 w-3" />
-                                                                                AI generated
-                                                                            </Badge>
-                                                                        )}
-                                                                    </div>
-
-                                                                    {/* Refine buttons (only for AI-generated answers with content) */}
-                                                                    {q.answer_text && (
-                                                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                                                            <span className="text-xs text-muted-foreground mr-0.5">Refine:</span>
-                                                                            {REFINE_PRESETS.map((preset) => {
-                                                                                const Icon = preset.icon;
-                                                                                return (
-                                                                                    <button
-                                                                                        key={preset.label}
-                                                                                        onClick={() => handleRefineAnswer(q.id, preset.instruction)}
-                                                                                        disabled={isRefining}
-                                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                                    >
-                                                                                        <Icon className="h-3 w-3" />
-                                                                                        {preset.label}
-                                                                                    </button>
-                                                                                );
-                                                                            })}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </CardContent>
-                                                </Card>
-                                            );
-                                        })}
-                                </div>
-                            </ScrollArea>
+                            <QAAssistant applicationId={application.id} />
                         </TabsContent>
 
                         {/* ─── Interview Prep Tab ─── */}
@@ -1054,6 +1042,116 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     </div>
                 </Tabs>
             </div>
+
+            {/* Save as Template Dialog (from tailor bar) */}
+            {showSaveAsTemplateDialog && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">Save Tailored Resume</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Give this tailored resume a name. It will be saved to your Resumes library and linked to this application.
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Resume name</label>
+                            <input
+                                type="text"
+                                value={saveAsTemplateName}
+                                onChange={e => setSaveAsTemplateName(e.target.value)}
+                                placeholder="e.g. Software Engineer - Google"
+                                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveAsTemplate(); }}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setShowSaveAsTemplateDialog(false)}>
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleSaveAsTemplate}
+                                disabled={savingAsTemplate || !saveAsTemplateName.trim()}
+                            >
+                                {savingAsTemplate ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Save Resume
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Save Frozen Edit Dialog */}
+            {showSaveFrozenDialog && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">Save as New Resume</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                This will save your edits as a new resume in your library. The original snapshot for this application remains unchanged.
+                            </p>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Resume name</label>
+                            <input
+                                type="text"
+                                value={frozenSaveName}
+                                onChange={e => setFrozenSaveName(e.target.value)}
+                                placeholder="e.g. Software Engineer - Google (revised)"
+                                className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === "Enter") handleSaveFrozenEdit(); }}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setShowSaveFrozenDialog(false)}>Cancel</Button>
+                            <Button
+                                onClick={handleSaveFrozenEdit}
+                                disabled={savingFrozen || !frozenSaveName.trim()}
+                            >
+                                {savingFrozen ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Save Resume
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Applied Confirmation Dialog */}
+            {showAppliedConfirm && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">Mark as Applied?</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                Your current resume will be saved as a snapshot for this application. This records your resume at the time you applied.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setShowAppliedConfirm(false);
+                                    setPendingStatus(null);
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={async () => {
+                                    setShowAppliedConfirm(false);
+                                    if (pendingStatus) await doStatusUpdate(pendingStatus);
+                                    setPendingStatus(null);
+                                }}
+                                disabled={updatingStatus}
+                            >
+                                {updatingStatus ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                                Mark as Applied
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Toast Notifications */}
             <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
