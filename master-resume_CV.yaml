@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/rendercv/rendercv/refs/tags/v2.3/schema.json
+cv:
+  name: Yashwanth Kumar Kurakula
+  email: yashwanth.415@gmail.com
+  phone: '+61 451 035 604'
+  social_networks:
+    - network: LinkedIn
+      username: linkedin/yashwanth-kumar-kurakula
+    - network: GitHub
+      username: github.com/yakuraku
+  sections:
+    skills:
+      - label: AI/ML Engineering
+        details: Production LLM deployment (Qwen, GPT-4, Gemini), RAG systems (FAISS, vector databases), LoRA fine-tuning, hyperparameter optimization, model evaluation (ROUGE, perplexity, human-in-the-loop), prompt engineering, agentic AI workflows
+      - label: ML Frameworks & Tools
+        details: PyTorch, TensorFlow, Hugging Face Transformers, LangChain, scikit-learn, XGBoost, YOLO, OpenCV, Supervision
+      - label: Vector & Embeddings
+        details: FAISS indexing, BAAI/bge embeddings, semantic search, hybrid retrieval (dense + sparse), reranking strategies
+      - label: Backend Development
+        details: Python (FastAPI, Flask), TypeScript, Node.js, RESTful APIs, WebSocket, microservices architecture
+      - label: Frontend Development
+        details: React.js, Vue.js, Next.js, responsive UI/UX design, state management (Redux, Vuex), modern component libraries
+      - label: Cloud & MLOps
+        details: GCP (Compute Engine, Cloud Storage, Cloud Run), AWS (Lambda, S3, SageMaker, ECS), Docker, Kubernetes, serverless architecture, CI/CD pipelines
+      - label: Big Data & Processing
+        details: Apache Spark (PySpark ML, Structured Streaming), Kafka, distributed computing, ETL pipelines, real-time data processing
+      - label: Databases
+        details: PostgreSQL, DynamoDB, Redis, vector databases, database optimization, query performance tuning
+      - label: Development Tools & Automation
+        details: Git, VS Code, Jupyter, Google Colab, Kaggle, RunPod, n8n
+    experience:
+      - company: Monash Connected Autonomous Vehicle
+        position: Software Engineer
+        start_date: 2025-02
+        end_date: 2025-06
+        highlights:
+          - Architecting autonomous navigation stack using ROS 2 for competition-grade self-driving vehicle competing in IGVC Michigan 2025, integrating LiDAR, camera, and IMU sensor fusion for real-time perception and localization
+          - Implementing YOLO-based object detection pipeline and neural network models for lane detection, achieving sub-100ms inference latency on edge devices; developing cost map-based path planning algorithms with dynamic obstacle avoidance
+          - Leveraging NVIDIA Isaac Sim (Omniverse) for simulation-driven development, validating navigation algorithms across 50+ virtual scenarios before hardware deployment, reducing physical testing time by 60%
+      - company: ADP
+        position: Associate Software Developer
+        start_date: 2021-11
+        end_date: 2024-02
+        highlights:
+          - Engineered high-throughput ETL pipelines using Talend and Java, processing 500K+ payroll records daily from enterprise HR platforms (Workday, Oracle Fusion, Celergo) into SAP GlobalView, serving 120+ multinational clients across APAC and EMEA regions
+          - Led critical performance optimization initiative on production payroll systems, conducting root-cause analysis and implementing algorithmic improvements that reduced job execution time by 150% (from 45min to 18min average), cutting infrastructure costs by $180K annually
+          - Designed fault-tolerant data transformation workflows with comprehensive error handling, achieving 99.7% data quality score and zero critical incidents during 18-month period serving Fortune 500 clients
+    projects:
+      - name: 'Plantopia: AI-Powered Climate Action Platform for Urban Gardening'
+        highlights:
+          - Architected production-grade hybrid RAG system with BAAI/bge-base-en-v1.5 embeddings + FAISS, indexing 2,117 Melbourne-suitable plant species with 94% retrieval accuracy; integrated real-time weather API for climate-responsive recommendations
+          - 'Fine-tuned Qwen2.5-VL-7B-Instruct using LoRA (rank=16, alpha=32) on 8,500+ curated gardening Q&A pairs, improving context coherence by 38% (ROUGE-L: 0.52→0.72); deployed intelligent chatbot serving 50+ users with under 2s response latency using GPT-4 and Gemini fallback'
+          - Engineered hybrid recommendation engine combining collaborative filtering and content-based methods, analyzing user preferences with Melbourne Bureau of Meteorology API integration for personalized, climate-resilient plant suggestions
+          - Built full-stack application using Vue.js/React frontend and FastAPI backend on GCP Cloud Run with PostgreSQL; implemented OAuth 2.0 (Google Sign-In), GDPR-compliant data anonymization, and CI/CD pipeline with 92% code coverage
+          - Designed automated data pipeline with web scraping (Beautiful Soup, Scrapy) collecting 15K+ articles from 30+ sources; implemented efficient vector indexing with chunking (512 tokens), batch embedding generation, and FAISS IVF clustering for sub-50ms retrieval
+      - name: AWS Serverless & Cloud ML Deployment
+        highlights:
+          - Built event-driven serverless architecture using AWS Lambda, S3, and DynamoDB for automated bird species detection (BirdTag), processing 100MB+ media files with presigned URL uploads; deployed YOLOv8 model achieving 89% accuracy across 200+ species
+          - Designed enterprise-scale AWS infrastructure for AI fitness platform (50K+ users), implementing SageMaker endpoints for real-time pose estimation with under 300ms latency; architected multi-tier caching (CloudFront + ElastiCache Redis) reducing database load by 85%
+          - Containerized OpenPose API using Docker multi-stage builds and deployed on Kubernetes with HPA; configured resource management with liveness/readiness probes and ThreadPoolExecutor rate limiting
+          - Conducted comprehensive load testing with Locust (1000+ concurrent users), optimizing response times to 90th percentile under 2.5s; implemented cost optimization strategies including spot instances (70% savings), S3 intelligent tiering (40% savings), and reserved instances (40% compute savings)
+      - name: 'Apache Spark ML & Real-Time Streaming: Food Delivery Prediction System'
+        highlights:
+          - Developed end-to-end distributed ML pipeline processing 200K+ delivery orders using PySpark ML, engineering 15+ features including Haversine distance calculations, temporal patterns, and weather-road interaction variables for enhanced prediction accuracy
+          - Trained Gradient Boosted Trees regression model with systematic hyperparameter optimization (ParamGridBuilder + TrainValidationSplit), achieving RMSE 3.02 minutes and R² 0.98 through tuning
+          - Built real-time streaming system integrating Kafka producers and Spark Structured Streaming, processing 20-50 orders every 5 seconds with windowed aggregations (15s revenue windows, 30s order counts by suburb) and intelligent driver assignment using stream-static joins
+          - Implemented production-ready pipeline with data quality checks, automated null handling, and Parquet output format for downstream analytics; optimized partition sizes and leveraged parallelism (4 cores) for efficient distributed processing
+      - name: 'Note Flow: AI Powered Music Generation (Python)'
+        highlights:
+          - Developed PyTorch LSTM generating Irish folk music in ABC notation with agentic self-critic for quality control; implemented cloud-ready distributed training with dataset sharding and benchmarked ABC↔MIDI conversion improving realism by 23%
+      - name: "Parkinson's Disease Prediction using Biomedical Voice Data (R)"
+        highlights:
+          - Built R-based ML pipeline classifying Parkinson's from 24 voice features using LASSO + ensemble methods (Random Forest, SVM, XGBoost); designed Spark/Arrow-compatible workflow with agentic evaluation loop monitoring class imbalance and data drift
+    education:
+      - institution: Monash University
+        area: Data Science
+        degree: Master
+        start_date: 2024-02
+        end_date: present
+        location: Clayton, Australia
+        highlights:
+          - 'Relevant Coursework: Statistical Data Modelling, Machine Learning, Big Data Processing, Computer Networks, Artificial Intelligence, Object-Oriented Programming, BioInformatics, Cloud Computing'
+design:
+  theme: sb2nov
+  page:
+    show_last_updated_date: false
+locale:
+  language: en
