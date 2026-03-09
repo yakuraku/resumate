@@ -128,6 +128,7 @@ export default function SettingsPage() {
                     theme: data.theme,
                     default_master_resume_path: data.default_master_resume_path,
                     autosave_enabled: data.autosave_enabled,
+                    tailor_mode: data.tailor_mode || "agentic",
                 });
             } catch (e) {
                 showToast("Failed to load settings", "error");
@@ -528,15 +529,15 @@ export default function SettingsPage() {
                                         }
                                         className="font-mono text-sm"
                                     />
-                                    {/* Popular model chips */}
+                                    {/* Suggested model chips */}
                                     <div className="flex flex-wrap gap-1.5 pt-1">
-                                        <span className="text-xs text-muted-foreground self-center">Popular:</span>
+                                        <span className="text-xs text-muted-foreground self-center">Suggested:</span>
                                         {(
                                             current.llm_provider === "openai"
-                                                ? ["gpt-5-nano", "gpt-5-mini", "gpt-5.1", "gpt-5.2"]
+                                                ? ["gpt-5", "gpt-5-mini", "gpt-5.1", "gpt-5.2"]
                                                 : current.llm_provider === "openrouter"
-                                                ? ["anthropic/claude-sonnet-4", "openai/gpt-5-mini", "google/gemini-2.5-flash", "deepseek/deepseek-r1"]
-                                                : ["gemini-2.5-flash"]
+                                                ? ["anthropic/claude-sonnet-4-5", "anthropic/claude-haiku-4-5", "google/gemini-2.5-flash", "meta-llama/llama-4-maverick"]
+                                                : ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"]
                                         ).map((m) => (
                                             <button
                                                 key={m}
@@ -591,6 +592,64 @@ export default function SettingsPage() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        </section>
+
+                        {/* Tailoring Mode */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Tailoring Mode</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Agentic mode runs a multi-step loop: the AI reads your context files, validates the YAML, and self-heals errors before submitting. Standard mode is a single fast LLM call.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-3">
+                                {(["agentic", "standard"] as const).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => handleChange("tailor_mode", mode)}
+                                        className={`w-full flex items-start gap-4 p-4 rounded-lg border text-left transition-all ${
+                                            (current as AppSettings & { tailor_mode?: string }).tailor_mode === mode || (!((current as AppSettings & { tailor_mode?: string }).tailor_mode) && mode === "agentic")
+                                                ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                                                : "border-border hover:border-primary/40 hover:bg-muted/30"
+                                        }`}
+                                    >
+                                        <div className="mt-0.5 shrink-0">
+                                            {mode === "agentic" ? (
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                    (current as AppSettings & { tailor_mode?: string }).tailor_mode === mode || (!((current as AppSettings & { tailor_mode?: string }).tailor_mode) && mode === "agentic")
+                                                        ? "border-primary" : "border-muted-foreground"
+                                                }`}>
+                                                    {((current as AppSettings & { tailor_mode?: string }).tailor_mode === mode || (!((current as AppSettings & { tailor_mode?: string }).tailor_mode) && mode === "agentic")) && (
+                                                        <div className="w-2 h-2 rounded-full bg-primary" />
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                                    (current as AppSettings & { tailor_mode?: string }).tailor_mode === mode
+                                                        ? "border-primary" : "border-muted-foreground"
+                                                }`}>
+                                                    {(current as AppSettings & { tailor_mode?: string }).tailor_mode === mode && (
+                                                        <div className="w-2 h-2 rounded-full bg-primary" />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className={`text-sm font-semibold capitalize ${
+                                                (current as AppSettings & { tailor_mode?: string }).tailor_mode === mode || (!((current as AppSettings & { tailor_mode?: string }).tailor_mode) && mode === "agentic")
+                                                    ? "text-primary" : ""
+                                            }`}>
+                                                {mode === "agentic" ? "Agentic (Recommended)" : "Standard"}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                {mode === "agentic"
+                                                    ? "Multi-step loop · Reads context selectively · Self-heals YAML errors · Writes learnings to helper"
+                                                    : "Single LLM call · Faster · No self-healing · All context loaded at once"}
+                                            </p>
+                                        </div>
+                                    </button>
+                                ))}
                             </div>
                         </section>
 

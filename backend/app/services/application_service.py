@@ -4,30 +4,53 @@ from app.models import Application
 from app.schemas.application import ApplicationCreate, ApplicationUpdate
 from typing import Optional, List, Tuple
 from fastapi import HTTPException
+from datetime import date, timedelta
 
 class ApplicationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    async def _auto_ghost_stale_applications(self) -> None:
+        """
+        Automatically mark 'applied' applications as 'ghosted' if applied_date
+        is more than 30 days in the past.
+        """
+        cutoff = date.today() - timedelta(days=30)
+        stale_query = (
+            select(Application)
+            .where(Application.status == "applied")
+            .where(Application.applied_date != None)  # noqa: E711
+            .where(Application.applied_date <= cutoff)
+        )
+        stale_result = await self.db.execute(stale_query)
+        stale_apps = stale_result.scalars().all()
+        for app in stale_apps:
+            app.status = "ghosted"
+        if stale_apps:
+            await self.db.commit()
+
     async def get_all(
-        self, 
-        page: int = 1, 
-        page_size: int = 20, 
+        self,
+        page: int = 1,
+        page_size: int = 20,
         status: Optional[str] = None
     ) -> Tuple[List[Application], int]:
+        # Auto-ghost stale applied applications before returning results
+        await self._auto_ghost_stale_applications()
+
         query = select(Application)
         count_query = select(func.count()).select_from(Application)
-        
+
         if status:
             query = query.where(Application.status == status)
             count_query = count_query.where(Application.status == status)
-            
+
         query = query.order_by(desc(Application.updated_at))
         query = query.offset((page - 1) * page_size).limit(page_size)
-        
+
         result = await self.db.execute(query)
         count_result = await self.db.execute(count_query)
-        
+
         return result.scalars().all(), count_result.scalar()
 
     async def create(self, data: ApplicationCreate) -> Application:

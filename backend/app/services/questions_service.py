@@ -95,24 +95,20 @@ class QuestionsService:
         if resume:
             resume_yaml = resume.yaml_content or ""
 
-        # Load user context from my_info files
-        from app.utils.filesystem import get_project_root
+        # Load user context from configured context folder
+        from app.utils.filesystem import get_context_folder
 
-        user_context = ""
+        context_parts = []
         try:
-            my_info_dir = get_project_root() / "my_info"
-            if my_info_dir.exists():
-                for file_path in sorted(my_info_dir.glob("*.md")):
+            context_dir = get_context_folder()
+            if context_dir.exists():
+                for file_path in sorted(context_dir.glob("*.md")):
                     content = file_path.read_text(encoding="utf-8")
-                    user_context += f"\n--- {file_path.name} ---\n{content}\n"
+                    context_parts.append(f"### {file_path.stem}\n{content}")
         except Exception as e:
-            print(f"Error loading my_info: {e}")
+            print(f"Error loading context folder: {e}")
 
-        # Also load from UserContext table
-        from app.models.user_context import UserContext
-        ctx_result = await db.execute(select(UserContext))
-        for ctx in ctx_result.scalars().all():
-            user_context += f"\n{ctx.key}: {ctx.value}"
+        user_context = "\n\n".join(context_parts) if context_parts else ""
 
         # Load active system prompt and inject rules
         active_system_prompt = await get_active_prompt(db, "qa_saved")

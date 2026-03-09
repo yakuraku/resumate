@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect } from "react";
-import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User } from "lucide-react";
+import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User, Pencil, X, Loader2 } from "lucide-react";
 import { ApplicationService } from "@/services/application.service";
 import { CreateApplicationModal } from "@/components/applications/CreateApplicationModal";
 import { ApplicationResponse, ApplicationStatus } from "@/types/application";
@@ -123,6 +123,36 @@ export default function DashboardPage() {
             } catch (error) {
                 console.error("Failed to delete application:", error);
             }
+        }
+    };
+
+    // Rename state
+    const [renamingApp, setRenamingApp] = useState<ApplicationResponse | null>(null);
+    const [renameRole, setRenameRole] = useState("");
+    const [renameCompany, setRenameCompany] = useState("");
+    const [savingRename, setSavingRename] = useState(false);
+
+    const openRenameModal = (app: ApplicationResponse, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setRenamingApp(app);
+        setRenameRole(app.role);
+        setRenameCompany(app.company);
+    };
+
+    const handleRename = async () => {
+        if (!renamingApp) return;
+        const trimmedRole = renameRole.trim();
+        const trimmedCompany = renameCompany.trim();
+        if (!trimmedRole || !trimmedCompany) return;
+        setSavingRename(true);
+        try {
+            await ApplicationService.update(renamingApp.id, { role: trimmedRole, company: trimmedCompany });
+            setRenamingApp(null);
+            refetch();
+        } catch (error) {
+            console.error("Failed to rename application:", error);
+        } finally {
+            setSavingRename(false);
         }
     };
 
@@ -504,6 +534,13 @@ export default function DashboardPage() {
                                             <td className="px-6 py-3.5 text-right">
                                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button
+                                                        onClick={(e) => openRenameModal(app, e)}
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                        title="Rename"
+                                                    >
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button
                                                         onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
                                                         className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
                                                         title="Delete"
@@ -558,6 +595,72 @@ export default function DashboardPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Rename Modal */}
+            {renamingApp && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                    onClick={() => !savingRename && setRenamingApp(null)}
+                >
+                    <div
+                        className="w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-6 space-y-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-base font-semibold text-foreground">Rename Application</h2>
+                            <button
+                                onClick={() => setRenamingApp(null)}
+                                disabled={savingRename}
+                                className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Role / Job Title</label>
+                                <input
+                                    autoFocus
+                                    value={renameRole}
+                                    onChange={(e) => setRenameRole(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenamingApp(null); }}
+                                    className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-primary/50 transition-colors"
+                                    placeholder="e.g. Senior Software Engineer"
+                                    disabled={savingRename}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Company</label>
+                                <input
+                                    value={renameCompany}
+                                    onChange={(e) => setRenameCompany(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenamingApp(null); }}
+                                    className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-primary/50 transition-colors"
+                                    placeholder="e.g. Acme Corp"
+                                    disabled={savingRename}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                onClick={() => setRenamingApp(null)}
+                                disabled={savingRename}
+                                className="px-3 py-1.5 text-sm rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRename}
+                                disabled={savingRename || !renameRole.trim() || !renameCompany.trim()}
+                                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                            >
+                                {savingRename && <Loader2 size={13} className="animate-spin" />}
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

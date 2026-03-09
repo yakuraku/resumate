@@ -37,12 +37,26 @@ class ResumeService:
                 raise HTTPException(status_code=404, detail="Source resume not found")
             yaml_content = source_resume.yaml_content
         else:
-            master_path = get_master_resume_path()
-            try:
-                yaml_content = read_file(master_path)
-            except Exception as e:
-                yaml_content = "cv:\n  name: Your Name\n"
-                print(f"Warning: Could not read master resume: {e}")
+            # Check if application has a linked resume template; use its YAML if available
+            app_result = await db.execute(select(Application).where(Application.id == application_id))
+            linked_app = app_result.scalars().first()
+            if linked_app and linked_app.resume_template_id:
+                from app.models.resume_template import ResumeTemplate
+                tmpl_result = await db.execute(
+                    select(ResumeTemplate).where(ResumeTemplate.id == linked_app.resume_template_id)
+                )
+                template = tmpl_result.scalars().first()
+                if template and template.yaml_content:
+                    yaml_content = template.yaml_content
+
+            # Fall back to master resume file if no template content was found
+            if not yaml_content:
+                master_path = get_master_resume_path()
+                try:
+                    yaml_content = read_file(master_path)
+                except Exception as e:
+                    yaml_content = "cv:\n  name: Your Name\n"
+                    print(f"Warning: Could not read master resume: {e}")
 
         new_resume = Resume(
             application_id=application_id,

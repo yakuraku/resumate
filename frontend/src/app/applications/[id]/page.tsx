@@ -15,7 +15,7 @@ import {
     ArrowLeft, ExternalLink, Briefcase, FileText, Download, BrainCircuit,
     Loader2, MessageSquare, AlertTriangle, RefreshCw,
     HelpCircle, RotateCcw, ThumbsUp, X, ChevronDown, Check, Info,
-    BookOpen, Star
+    BookOpen, Star, Pencil
 } from "lucide-react";
 import { ResumeTemplateService } from "@/services/resume-template.service";
 import type { ResumeTemplate } from "@/types/resume-template";
@@ -33,6 +33,10 @@ import type { SaveStatus } from "@/components/shared/SaveIndicator";
 import { useAutosave } from "@/hooks/useAutosave";
 import { QAAssistant } from "@/components/qa/QAAssistant";
 import { CredentialCard } from "@/components/credentials/CredentialCard";
+import { AgentProgressModal, type AgentEvent } from "@/components/resume/AgentProgressModal";
+import { SettingsService } from "@/services/settings.service";
+import { SavePdfButton } from "@/components/ui/SavePdfButton";
+import { AiTailorButton } from "@/components/ui/AiTailorButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
 
@@ -53,6 +57,12 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [resume, setResume] = useState<Resume | null>(null);
     const [loading, setLoading] = useState(true);
     const [tailoring, setTailoring] = useState(false);
+    const [agentModalOpen, setAgentModalOpen] = useState(false);
+    const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
+    const [agentModel, setAgentModel] = useState("");
+    const [agentComplete, setAgentComplete] = useState(false);
+    const [agentError, setAgentError] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const [saving, setSaving] = useState(false);
 
     // JD Editing State
@@ -106,6 +116,12 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [showSaveFrozenDialog, setShowSaveFrozenDialog] = useState(false);
     const [frozenSaveName, setFrozenSaveName] = useState("");
     const [savingFrozen, setSavingFrozen] = useState(false);
+
+    // Rename (role / company) state
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [editRole, setEditRole] = useState("");
+    const [editCompany, setEditCompany] = useState("");
+    const [savingTitle, setSavingTitle] = useState(false);
 
     // Derived: is viewing the active version?
     const versions = resume?.versions ?? [];
@@ -209,8 +225,10 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     console.log("Could not load templates", e);
                 }
 
+                let loadedResume = null;
                 try {
                     const resumeData = await ResumeService.getByApplicationId(id);
+                    loadedResume = resumeData;
                     setResume(resumeData);
                     const active = resumeData.versions?.find((v) => v.is_active);
                     if (active) {
@@ -230,6 +248,27 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     }
                 } catch (e) {
                     console.log("Resume may not exist yet", e);
+                }
+
+                // If no resume exists yet but the application has a linked template,
+                // auto-create the resume from that template so the user lands directly
+                // in the editor rather than seeing the "No resume created yet" screen.
+                if (!loadedResume && appData.resume_template_id) {
+                    try {
+                        const autoResume = await ResumeService.create(id);
+                        setResume(autoResume);
+                        const active = autoResume.versions?.find((v) => v.is_active);
+                        if (active) {
+                            setViewingVersionId(active.id);
+                            setDisplayYaml(active.yaml_content);
+                            setPreviewHash(new Date(autoResume.updated_at).getTime());
+                        } else {
+                            setDisplayYaml(autoResume.yaml_content);
+                            setPreviewHash(new Date(autoResume.updated_at).getTime());
+                        }
+                    } catch (autoErr) {
+                        console.log("Could not auto-create resume from template", autoErr);
+                    }
                 }
             } catch (error) {
                 console.error("Failed to fetch application", error);
@@ -311,29 +350,123 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
 
     const handleTailor = async () => {
         if (!resume) return;
-        if (!application?.job_description?.trim()) {
+        if (!application?.job_description) {
             showToast("A job description is required for AI tailoring. Add one in the Job Context tab.", "error");
             return;
         }
-        setTailoring(true);
-        setShowTailorBar(false);
+
+        // Check tailoring mode from settings
+        let tailorMode = "agentic";
         try {
-            const tailored = await ResumeService.tailorResume(resume.id);
-            setResume(tailored);
-            const newActive = tailored.versions?.find((v) => v.is_active);
-            if (newActive) {
-                setViewingVersionId(newActive.id);
-                setDisplayYaml(newActive.yaml_content);
-                setTailoredYaml(newActive.yaml_content);
+            const s = await SettingsService.get();
+            tailorMode = (s as typeof s & { tailor_mode?: string }).tailor_mode || "agentic";
+        } catch {
+            // default to agentic
+        }
+
+        if (tailorMode === "standard") {
+            // Original single-call flow
+            setTailoring(true);
+            try {
+                const tailored = await ResumeService.tailorResume(resume.id);
+                setResume(tailored);
+                const newActive = tailored.versions?.find((v) => v.is_active);
+                if (newActive) {
+                    setViewingVersionId(newActive.id);
+                    setDisplayYaml(newActive.yaml_content);
+                    triggerPdfRefresh();
+                }
+                showToast("Resume tailored successfully");
+                setShowTailorBar(true);
+            } catch {
+                showToast("Failed to tailor resume", "error");
+            } finally {
+                setTailoring(false);
             }
-            triggerPdfRefresh();
-            showToast("Resume tailored successfully");
-            setShowTailorBar(true); // Show the action bar after successful tailor
-        } catch (e) {
-            console.error(e);
-            showToast("Failed to tailor resume", "error");
+            return;
+        }
+
+        // Agentic SSE flow
+        setAgentEvents([]);
+        setAgentComplete(false);
+        setAgentError(false);
+        setAgentModel("");
+        setAgentModalOpen(true);
+        setTailoring(true);
+
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        try {
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
+            const response = await fetch(`${apiBase}/resumes/${resume.id}/tailor/stream`, {
+                method: "POST",
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                const err = await response.text();
+                setAgentEvents((prev) => [...prev, { type: "error", message: err.slice(0, 300) }]);
+                setAgentError(true);
+                setTailoring(false);
+                return;
+            }
+
+            const reader = response.body?.getReader();
+            if (!reader) {
+                setAgentError(true);
+                setTailoring(false);
+                return;
+            }
+
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.startsWith("data: ")) continue;
+                    try {
+                        const event: AgentEvent = JSON.parse(line.slice(6));
+                        setAgentEvents((prev) => [...prev, event]);
+
+                        if (event.type === "start") {
+                            setAgentModel(event.model);
+                        } else if (event.type === "complete") {
+                            setAgentComplete(true);
+                        } else if (event.type === "persisted") {
+                            // Update resume state with the newly saved version
+                            const updatedResume = (event as { type: "persisted"; resume: Resume }).resume;
+                            setResume(updatedResume);
+                            const newActive = updatedResume.versions?.find((v: ResumeVersion) => v.is_active);
+                            if (newActive) {
+                                setViewingVersionId(newActive.id);
+                                setDisplayYaml(newActive.yaml_content);
+                                triggerPdfRefresh();
+                            }
+                            setShowTailorBar(true);
+                        } else if (event.type === "error") {
+                            setAgentError(true);
+                        }
+                    } catch {
+                        // ignore parse errors
+                    }
+                }
+            }
+        } catch (err: unknown) {
+            if (err instanceof Error && err.name !== "AbortError") {
+                setAgentEvents((prev) => [...prev, { type: "error", message: err.message }]);
+                setAgentError(true);
+            }
         } finally {
             setTailoring(false);
+            abortControllerRef.current = null;
         }
     };
 
@@ -530,6 +663,34 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         }
     };
 
+    const handleSaveTitle = async () => {
+        if (!application) return;
+        const trimmedRole = editRole.trim();
+        const trimmedCompany = editCompany.trim();
+        if (!trimmedRole || !trimmedCompany) {
+            showToast("Role and company cannot be empty", "error");
+            return;
+        }
+        if (trimmedRole === application.role && trimmedCompany === application.company) {
+            setIsEditingTitle(false);
+            return;
+        }
+        setSavingTitle(true);
+        try {
+            const updated = await ApplicationService.update(application.id, {
+                role: trimmedRole,
+                company: trimmedCompany,
+            });
+            setApplication(updated);
+            setIsEditingTitle(false);
+            showToast("Application updated");
+        } catch {
+            showToast("Failed to update application", "error");
+        } finally {
+            setSavingTitle(false);
+        }
+    };
+
     if (loading) {
         return (
             <CommandCenter>
@@ -561,10 +722,67 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-bold tracking-tight">{application.role}</h1>
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                                <span className="font-medium text-foreground">{application.company}</span>
-                                <span>•</span>
+                            {isEditingTitle ? (
+                                <div className="flex flex-col gap-1.5">
+                                    <input
+                                        autoFocus
+                                        value={editRole}
+                                        onChange={(e) => setEditRole(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") handleSaveTitle();
+                                            if (e.key === "Escape") setIsEditingTitle(false);
+                                        }}
+                                        className="text-2xl font-bold tracking-tight bg-transparent border-b border-primary focus:outline-none w-full"
+                                        placeholder="Job title"
+                                        disabled={savingTitle}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            value={editCompany}
+                                            onChange={(e) => setEditCompany(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") handleSaveTitle();
+                                                if (e.key === "Escape") setIsEditingTitle(false);
+                                            }}
+                                            className="text-sm font-medium bg-transparent border-b border-primary/50 focus:outline-none focus:border-primary"
+                                            placeholder="Company"
+                                            disabled={savingTitle}
+                                        />
+                                        <button
+                                            onClick={handleSaveTitle}
+                                            disabled={savingTitle}
+                                            className="text-xs px-2 py-0.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                        >
+                                            {savingTitle ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                                        </button>
+                                        <button
+                                            onClick={() => setIsEditingTitle(false)}
+                                            disabled={savingTitle}
+                                            className="text-xs px-2 py-0.5 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="group/title">
+                                    <div className="flex items-center gap-1.5">
+                                        <h1 className="text-2xl font-bold tracking-tight">{application.role}</h1>
+                                        <button
+                                            onClick={() => {
+                                                setEditRole(application.role);
+                                                setEditCompany(application.company);
+                                                setIsEditingTitle(true);
+                                            }}
+                                            title="Rename application"
+                                            className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+                                        >
+                                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                        <span className="font-medium text-foreground">{application.company}</span>
+                                        <span>•</span>
                                 {/* Clickable status selector */}
                                 <div className="relative" ref={statusDropdownRef}>
                                     <button
@@ -610,31 +828,23 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                         <span className="text-sm">Original Post</span>
                                     </a>
                                 )}
-                            </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <SaveIndicator status={yamlSaveStatus} />
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            className="gap-2"
+                        <AiTailorButton
                             onClick={handleTailor}
                             disabled={tailoring || !resume}
-                        >
-                            {tailoring ? <Loader2 className="h-4 w-4 animate-spin" /> : <BrainCircuit className="h-4 w-4" />}
-                            AI Tailor
-                        </Button>
-                        <Button
-                            size="sm"
-                            className="gap-2"
+                            tailoring={tailoring}
+                        />
+                        <SavePdfButton
                             onClick={handleSave}
                             disabled={saving || !resume}
-                            title="Save current resume as PDF"
-                        >
-                            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                            Save PDF
-                        </Button>
+                            saving={saving}
+                        />
                     </div>
                 </div>
 
@@ -1168,6 +1378,24 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     </div>
                 ))}
             </div>
+
+            {/* Agent Progress Modal */}
+            <AgentProgressModal
+                open={agentModalOpen}
+                events={agentEvents}
+                model={agentModel}
+                onClose={() => {
+                    if (!agentComplete && abortControllerRef.current) {
+                        abortControllerRef.current.abort();
+                    }
+                    setAgentModalOpen(false);
+                }}
+                onCheckResume={() => {
+                    setAgentModalOpen(false);
+                }}
+                isComplete={agentComplete}
+                hasError={agentError}
+            />
         </CommandCenter>
     );
 }

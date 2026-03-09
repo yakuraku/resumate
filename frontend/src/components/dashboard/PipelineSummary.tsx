@@ -42,6 +42,12 @@ const PIPELINE_SEGMENTS = [
         dotColor: "bg-red-400",
         countColor: "text-foreground",
     },
+    {
+        status: ApplicationStatus.GHOSTED,
+        label: "Ghosted",
+        dotColor: "bg-gray-400",
+        countColor: "text-foreground",
+    },
 ];
 
 export function PipelineSummary({ applications, onStatusFilter, activeFilter }: PipelineSummaryProps) {

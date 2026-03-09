@@ -15,6 +15,7 @@ DEFAULT_SETTINGS = {
     "theme": "dark",
     "default_master_resume_path": "master-resume_CV.yaml",
     "autosave_enabled": "true",
+    "tailor_mode": "agentic",  # "agentic" | "standard"
 }
 
 # Default model per provider
@@ -53,6 +54,7 @@ class SettingsService:
             theme=raw.get("theme", DEFAULT_SETTINGS["theme"]),
             default_master_resume_path=raw.get("default_master_resume_path", DEFAULT_SETTINGS["default_master_resume_path"]),
             autosave_enabled=raw.get("autosave_enabled", "true").lower() == "true",
+            tailor_mode=raw.get("tailor_mode", "agentic"),
         )
 
     async def update_settings(self, db: AsyncSession, data: SettingsUpdate) -> SettingsResponse:

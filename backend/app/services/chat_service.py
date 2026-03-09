@@ -1,10 +1,10 @@
 import uuid
 from datetime import datetime, timezone
+from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.chat_history import ChatHistory
 from app.models.application import Application
-from app.models.user_context import UserContext
 from app.services.llm_service import LLMService
 from app.services.prompts import (
     QA_CHAT_GENERATE_SYSTEM_PROMPT,
@@ -18,29 +18,23 @@ llm_service = LLMService()
 
 
 async def _load_context(application: Application, db: AsyncSession) -> str:
-    """Load user context: my_info files + UserContext DB rows + resume YAML snippet."""
-    from app.utils.filesystem import get_project_root
+    """Load user context: my_info files + resume YAML snippet."""
+    from app.utils.filesystem import get_context_folder
 
     context_parts = []
 
-    # Load my_info/*.md files
+    # Load context folder *.md files
     try:
-        my_info_dir = get_project_root() / "my_info"
-        if my_info_dir.exists():
-            for md_file in sorted(my_info_dir.glob("*.md")):
+        context_dir = get_context_folder()
+        if context_dir.exists():
+            for md_file in sorted(context_dir.glob("*.md")):
                 try:
                     content = md_file.read_text(encoding="utf-8")
                     context_parts.append(f"### {md_file.stem}\n{content}")
                 except Exception:
                     pass
     except Exception as e:
-        print(f"Error loading my_info: {e}")
-
-    # Load UserContext rows
-    result = await db.execute(select(UserContext))
-    user_contexts = result.scalars().all()
-    for uc in user_contexts:
-        context_parts.append(f"### {uc.key}\n{uc.value}")
+        print(f"Error loading context folder: {e}")
 
     user_context_str = "\n\n".join(context_parts) if context_parts else "No user context available."
 
@@ -168,3 +162,99 @@ async def send_message(db: AsyncSession, chat_id: str, user_content: str):
     await db.refresh(chat)
 
     return {"role": "assistant", "content": assistant_content}
+
+
+async def stream_message(
+    db: AsyncSession, chat_id: str, user_content: str
+) -> AsyncGenerator[dict, None]:
+    """
+    Pre-loads all DB state using the request-scoped session, then returns an
+    async generator that streams LLM deltas and persists the final message via
+    a fresh session (the request-scoped `db` cannot be used inside a generator
+    that outlives the request context).
+
+    Raises ValueError if chat or application is not found.
+
+    Yields:
+      {"type": "delta",  "content": "<token>"}
+      {"type": "done"}
+      {"type": "error",  "message": "<reason>"}  -- instead of "done" on failure
+    """
+    from sqlalchemy.orm import selectinload
+    from app.database import SessionLocal
+
+    # ── Phase 1: All DB reads (request-scoped session, safe here) ──────────
+    result = await db.execute(select(ChatHistory).where(ChatHistory.id == chat_id))
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise ValueError(f"Conversation {chat_id} not found")
+
+    app_result = await db.execute(
+        select(Application)
+        .options(selectinload(Application.resume))
+        .where(Application.id == chat.application_id)
+    )
+    application = app_result.scalar_one_or_none()
+    if not application:
+        raise ValueError("Application not found")
+
+    context = await _load_context(application, db)
+
+    if chat.module == "qa_generate":
+        base_prompt = await get_active_prompt(db, "qa_generate")
+    else:
+        base_prompt = await get_active_prompt(db, "qa_rewrite")
+    system_prompt = base_prompt + "\n\n" + context
+
+    rules = await tailor_rule_service.get_enabled_rule_texts(db, application_id=application.id)
+    if rules:
+        rules_text = "\n".join(f"- {r}" for r in rules)
+        system_prompt += f"\n\n## IMPORTANT RULES (You MUST follow these strictly):\n{rules_text}"
+
+    existing_messages = list(chat.messages or [])
+    chat_id_str = str(chat.id)
+
+    llm_messages = [{"role": "system", "content": system_prompt}]
+    llm_messages.extend(existing_messages)
+    llm_messages.append({"role": "user", "content": user_content})
+
+    # ── Phase 2: Return generator (closure over captured plain values) ──────
+    async def _generator() -> AsyncGenerator[dict, None]:
+        collected: list[str] = []
+        try:
+            async for chunk in llm_service.stream_completion(
+                messages=llm_messages, temperature=0.6
+            ):
+                if chunk:
+                    collected.append(chunk)
+                    yield {"type": "delta", "content": chunk}
+        except Exception as e:
+            yield {"type": "error", "message": str(e)}
+            return
+
+        assistant_content = "".join(collected).strip()
+        if not assistant_content:
+            yield {"type": "error", "message": "The model returned an empty response."}
+            return
+
+        # Persist with a fresh session — request-scoped db is no longer usable here
+        try:
+            async with SessionLocal() as new_db:
+                r = await new_db.execute(
+                    select(ChatHistory).where(ChatHistory.id == chat_id_str)
+                )
+                chat_row = r.scalar_one_or_none()
+                if chat_row:
+                    new_msgs = list(chat_row.messages or [])
+                    new_msgs.append({"role": "user", "content": user_content})
+                    new_msgs.append({"role": "assistant", "content": assistant_content})
+                    chat_row.messages = new_msgs
+                    chat_row.updated_at = datetime.now(timezone.utc)
+                    await new_db.commit()
+        except Exception as e:
+            # Log but don't surface — user already saw the full response
+            print(f"[Chat Stream] Failed to persist messages for {chat_id_str}: {e}")
+
+        yield {"type": "done"}
+
+    return _generator()

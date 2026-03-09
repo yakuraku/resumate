@@ -27,6 +27,7 @@ class SettingsResponse(BaseModel):
     theme: str = "dark"
     default_master_resume_path: str = "master-resume_CV.yaml"
     autosave_enabled: bool = True
+    tailor_mode: str = "agentic"
 
 
 class LLMTestRequest(BaseModel):
@@ -51,6 +52,7 @@ class SettingsUpdate(BaseModel):
     theme: Optional[str] = None
     default_master_resume_path: Optional[str] = None
     autosave_enabled: Optional[bool] = None
+    tailor_mode: Optional[str] = None
     custom_prompt_resume_tailoring: Optional[str] = None
     custom_prompt_qa_generate: Optional[str] = None
     custom_prompt_qa_rewrite: Optional[str] = None

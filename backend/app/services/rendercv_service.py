@@ -96,4 +96,42 @@ class RenderCVService:
                 except Exception as e:
                     print(f"Cleanup warning: {e}")
 
+    async def validate_yaml(self, yaml_content: str) -> tuple[bool, str]:
+        """
+        Validates YAML by running RenderCV render without keeping the output.
+        Returns (True, "OK") on success, or (False, error_message) on failure.
+        Uses sys.executable to ensure the same venv/rendercv version (2.3).
+        """
+        import uuid, shutil, asyncio, subprocess, sys
+        run_id = str(uuid.uuid4())
+        temp_dir = get_project_root() / "temp" / f"validate_{run_id}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = temp_dir / "cv.yaml"
+        try:
+            yaml_file.write_text(yaml_content, encoding="utf-8")
+            cmd = [sys.executable, "-m", "rendercv", "render", "cv.yaml"]
+            process = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                cwd=str(temp_dir),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                timeout=60,
+            )
+            if process.returncode == 0:
+                return True, "OK"
+            # Extract the most useful part of the error
+            stderr = (process.stderr or "").strip()
+            stdout = (process.stdout or "").strip()
+            error_msg = stderr or stdout or f"RenderCV exited with code {process.returncode}"
+            # Trim to first 800 chars so it fits in the agent context
+            return False, error_msg[:800]
+        except Exception as e:
+            return False, f"Validation error: {str(e)}"
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 rendercv_service = RenderCVService()

@@ -80,6 +80,11 @@ export function QAAssistant({ applicationId }: Props) {
     // Copy state for individual assistant messages
     const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
 
+    // Streaming state
+    const [streamingContent, setStreamingContent] = useState<string>("");
+    const streamingContentRef = useRef<string>("");
+    const streamAbortRef = useRef<AbortController | null>(null);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // ── Saved Answers state ──────────────────────────────────────
@@ -141,10 +146,22 @@ export function QAAssistant({ applicationId }: Props) {
         loadLastConversation();
     }, [applicationId, chatMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Auto-scroll messages
+    // Abort any in-flight stream on unmount
+    useEffect(() => {
+        return () => { streamAbortRef.current?.abort(); };
+    }, []);
+
+    // Auto-scroll on new messages
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, isSending]);
+
+    // Auto-scroll during streaming (instant, not smooth, to track the growing text)
+    useEffect(() => {
+        if (streamingContent) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        }
+    }, [streamingContent]);
 
     // Load questions when switching to saved view
     useEffect(() => {
@@ -168,6 +185,7 @@ export function QAAssistant({ applicationId }: Props) {
     // ── Chat helpers ─────────────────────────────────────────────
 
     const handleNewChat = async () => {
+        streamAbortRef.current?.abort();
         setIsCreatingChat(true);
         try {
             const convo = await chatService.createConversation(applicationId, chatMode);
@@ -206,15 +224,60 @@ export function QAAssistant({ applicationId }: Props) {
         setInputText("");
         setMessages((prev) => [...prev, { role: "user", content }]);
         setIsSending(true);
+        streamingContentRef.current = "";
+        setStreamingContent("");
+
+        const controller = new AbortController();
+        streamAbortRef.current = controller;
 
         try {
-            const response = await chatService.sendMessage(activeChatId, content);
-            setMessages((prev) => [...prev, response]);
-        } catch (e) {
-            showToast("Failed to send message", "error");
-            // Remove the optimistic user message
-            setMessages((prev) => prev.slice(0, -1));
+            await chatService.streamMessage(
+                activeChatId,
+                content,
+                {
+                    onDelta: (chunk) => {
+                        streamingContentRef.current += chunk;
+                        setStreamingContent(streamingContentRef.current);
+                    },
+                    onDone: () => {
+                        const finalContent = streamingContentRef.current;
+                        if (finalContent) {
+                            setMessages((prev) => [...prev, { role: "assistant", content: finalContent }]);
+                        }
+                        streamingContentRef.current = "";
+                        setStreamingContent("");
+                    },
+                    onError: (msg) => {
+                        const partial = streamingContentRef.current;
+                        if (partial) {
+                            // Keep whatever was streamed so the user doesn't lose it
+                            setMessages((prev) => [...prev, { role: "assistant", content: partial }]);
+                        }
+                        showToast(msg || "Failed to get response", "error");
+                        streamingContentRef.current = "";
+                        setStreamingContent("");
+                    },
+                },
+                controller.signal,
+            );
+        } catch (e: unknown) {
+            if (e instanceof Error && e.name === "AbortError") {
+                // Intentional abort (new chat, mode switch, unmount) — keep any partial content
+                const partial = streamingContentRef.current;
+                if (partial) {
+                    setMessages((prev) => [...prev, { role: "assistant", content: partial }]);
+                }
+            } else {
+                showToast("Failed to send message", "error");
+                // Remove the optimistic user message only if nothing was received
+                if (!streamingContentRef.current) {
+                    setMessages((prev) => prev.slice(0, -1));
+                }
+            }
+            streamingContentRef.current = "";
+            setStreamingContent("");
         } finally {
+            streamAbortRef.current = null;
             setIsSending(false);
         }
     };
@@ -228,6 +291,7 @@ export function QAAssistant({ applicationId }: Props) {
 
     const handleModeSwitch = (mode: ChatMode) => {
         if (mode === chatMode) return;
+        streamAbortRef.current?.abort();
         setInputText("");
         setChatMode(mode); // useEffect[chatMode] will auto-load the last conversation for the new mode
     };
@@ -262,6 +326,7 @@ export function QAAssistant({ applicationId }: Props) {
     };
 
     const handleLoadConversation = async (id: string) => {
+        streamAbortRef.current?.abort();
         try {
             const convo = await chatService.getConversation(id);
             setCurrentChatId(convo.id);
@@ -588,8 +653,21 @@ export function QAAssistant({ applicationId }: Props) {
                             </div>
                         ))}
 
-                        {/* Typing indicator */}
-                        {isSending && (
+                        {/* Streaming message bubble */}
+                        {isSending && streamingContent && (
+                            <div className="flex justify-start">
+                                <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1 mr-2">
+                                    <Bot className="h-3.5 w-3.5 text-primary" />
+                                </div>
+                                <div className="relative max-w-[80%] rounded-lg px-3 py-2.5 bg-muted text-foreground text-sm">
+                                    <MarkdownContent content={streamingContent} className="prose-sm" />
+                                    <span className="inline-block w-0.5 h-3.5 bg-foreground/60 animate-pulse ml-0.5 align-middle" />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Typing indicator — shown only before first token arrives */}
+                        {isSending && !streamingContent && (
                             <div className="flex justify-start">
                                 <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1 mr-2">
                                     <Bot className="h-3.5 w-3.5 text-primary" />

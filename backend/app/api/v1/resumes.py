@@ -1,17 +1,20 @@
 from datetime import datetime, timezone
 from email.utils import formatdate
 import hashlib
+import json as _json
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 
 from app.database import get_db
-from app.models.resume import ResumeVersion
+from app.models.resume import Resume, ResumeVersion
 from app.schemas.resume import ResumeRead, ResumeUpdate, ResumeVersionRead, ResumeVersionCreate
 from app.services.resume_service import resume_service
 from app.services.rendercv_service import rendercv_service
+from app.services.llm_service import llm_service
 from app.utils.filesystem import get_tailored_resumes_dir
 from fastapi.responses import FileResponse
 from pathlib import Path
@@ -199,6 +202,121 @@ async def tailor_resume(
         print(f"[PDF] Render warning after tailor: {msg[:200]}")
 
     return tailored
+
+@router.post("/{resume_id}/tailor/stream")
+async def tailor_resume_stream(
+    resume_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """SSE endpoint for agentic resume tailoring. Streams progress events as JSON lines."""
+    from app.services.agent_tailor_service import run_agentic_tailor
+    from app.services.tailor_rule_service import tailor_rule_service
+    from app.database import SessionLocal
+
+    stmt = select(Resume).where(Resume.id == resume_id).options(
+        selectinload(Resume.application)
+    )
+    result = await db.execute(stmt)
+    resume = result.scalar_one_or_none()
+
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if not resume.application or not resume.application.job_description:
+        raise HTTPException(status_code=400, detail="Application has no job description")
+
+    rules = await tailor_rule_service.get_enabled_rule_texts(db, application_id=resume.application.id)
+
+    # Capture plain values before the injected `db` session expires.
+    # StreamingResponse runs the generator outside the request's greenlet context,
+    # so the injected session cannot be used inside event_generator().
+    original_yaml = resume.yaml_content
+    job_description = resume.application.job_description
+    resume_id_str = str(resume.id)
+    model = llm_service.default_model
+
+    async def event_generator():
+        tailored_yaml = None
+        try:
+            async for event in run_agentic_tailor(
+                resume_yaml=original_yaml,
+                job_description=job_description,
+                rules=rules,
+                system_prompt=None,
+                model=model,
+            ):
+                yield f"data: {_json.dumps(event)}\n\n"
+
+                if event.get("type") == "complete":
+                    tailored_yaml = event.get("yaml_content", "")
+
+        except Exception as e:
+            yield f"data: {_json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+
+        if not tailored_yaml:
+            return
+
+        # Open a fresh session — the request-scoped `db` is no longer usable here.
+        try:
+            async with SessionLocal() as new_db:
+                from app.models.resume import VersionSource
+
+                # Load the resume fresh in this new session
+                r_stmt = select(Resume).where(Resume.id == resume_id_str).options(
+                    selectinload(Resume.versions)
+                )
+                r_result = await new_db.execute(r_stmt)
+                fresh_resume = r_result.scalar_one_or_none()
+                if not fresh_resume:
+                    yield f"data: {_json.dumps({'type': 'error', 'message': 'Resume not found during save'})}\n\n"
+                    return
+
+                # Deactivate all existing versions
+                for v in fresh_resume.versions:
+                    v.is_active = False
+
+                fresh_resume.yaml_content = tailored_yaml
+                fresh_resume.current_version += 1
+
+                new_version = ResumeVersion(
+                    resume_id=fresh_resume.id,
+                    version_number=fresh_resume.current_version,
+                    yaml_content=tailored_yaml,
+                    change_summary="AI Tailored (Agentic)",
+                    source=VersionSource.AI_TAILORED,
+                    is_active=True,
+                    label=f"AI Tailored v{fresh_resume.current_version}",
+                )
+                new_db.add(new_version)
+                await new_db.commit()
+
+                # Render PDF
+                output_dir = _resume_output_dir(resume_id_str)
+                output_path = output_dir / f"resume_{resume_id_str}.pdf"
+                _stale_pdf_path(resume_id_str).unlink(missing_ok=True)
+
+                success, msg = await rendercv_service.render_yaml_to_pdf(tailored_yaml, output_path)
+                if success:
+                    await new_db.refresh(new_version)
+                    await _record_pdf_render(new_db, str(new_version.id), output_path)
+
+                # Re-fetch with all relations for the final payload
+                final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str)
+                resume_data = ResumeRead.model_validate(final_resume)
+                yield f"data: {_json.dumps({'type': 'persisted', 'resume': resume_data.model_dump()})}\n\n"
+
+        except Exception as e:
+            yield f"data: {_json.dumps({'type': 'error', 'message': f'Failed to save: {str(e)}'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 
 @router.get("/{resume_id}/pdf")
 async def get_resume_pdf(

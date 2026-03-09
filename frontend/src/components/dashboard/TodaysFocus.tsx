@@ -89,7 +89,7 @@ export function TodaysFocus({ applications, onRefetch }: TodaysFocusProps) {
                                     {draft.role}
                                 </p>
                                 <p className="text-[11px] text-muted-foreground truncate">
-                                    Draft &bull; Edited {relativeTime(draft.updated_at)}
+                                    {draft.company} &bull; Draft &bull; Edited {relativeTime(draft.updated_at)}
                                 </p>
                             </div>
 

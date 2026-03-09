@@ -147,6 +147,95 @@ class LLMService:
                 print(f"LLM API Error: {e}")
                 raise e
 
+    async def get_completion_with_tools(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]],
+        model: Optional[str] = None,
+        temperature: float = 0.5,
+    ) -> Dict[str, Any]:
+        """
+        Single LLM call with tool definitions. Returns the full message object so
+        the caller can inspect finish_reason and tool_calls.
+        Supports OpenAI, OpenRouter (OpenAI-compatible), and Gemini (OpenAI-compat layer).
+        """
+        if not self.api_key:
+            # Mock: always call submit_tailored_resume
+            return {
+                "finish_reason": "tool_calls",
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "mock_call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "submit_tailored_resume",
+                            "arguments": '{"yaml_content": "cv:\\n  name: Mock\\n", "reasoning": "Mock run — no API key configured."}'
+                        }
+                    }]
+                }
+            }
+
+        import asyncio as _asyncio
+
+        resolved_model = model or self.default_model
+        is_reasoning = _is_reasoning_model(resolved_model)
+
+        payload: Dict[str, Any] = {
+            "model": resolved_model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+        }
+        if is_reasoning:
+            # Reasoning models (gpt-5-mini, o-series): max_completion_tokens
+            # covers BOTH internal thinking tokens AND visible output tokens.
+            # A full resume YAML is ~4k tokens; reasoning overhead can be 10k+.
+            # Per CLAUDE.md: never pass temperature for reasoning models.
+            payload["max_completion_tokens"] = 32000
+        else:
+            payload["temperature"] = temperature
+            payload["max_tokens"] = 8000
+
+        max_retries = 2
+        last_exc: Exception | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(
+                        self.base_url,
+                        headers=self.headers,
+                        json=payload,
+                        timeout=180.0,
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    usage = data.get("usage", {})
+                    if usage:
+                        print(f"[LLM Tool Usage] Prompt: {usage.get('prompt_tokens')}, Completion: {usage.get('completion_tokens')}")
+                    choice = data["choices"][0]
+                    return {
+                        "finish_reason": choice.get("finish_reason"),
+                        "message": choice.get("message", {}),
+                    }
+            except httpx.RemoteProtocolError as e:
+                last_exc = e
+                if attempt < max_retries:
+                    wait = 2 ** attempt  # 1s, 2s
+                    print(f"[LLM Tool] RemoteProtocolError (attempt {attempt + 1}/{max_retries + 1}), retrying in {wait}s: {e}")
+                    await _asyncio.sleep(wait)
+                    continue
+                print(f"[LLM Tool] RemoteProtocolError after {max_retries + 1} attempts: {e}")
+                raise
+            except httpx.HTTPStatusError as e:
+                print(f"[LLM Tool] API Error ({e.response.status_code}): {e.response.text[:300]}")
+                raise
+            except httpx.HTTPError as e:
+                print(f"[LLM Tool] HTTP Error: {e}")
+                raise
+        raise last_exc  # unreachable but satisfies type checker
+
     def truncate_text(self, text: str, max_tokens: int = 2000) -> str:
         """Rough truncation of text to fit within token limit (1 token ≈ 4 chars)."""
         if not text:

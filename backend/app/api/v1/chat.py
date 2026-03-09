@@ -1,4 +1,6 @@
+import json as _json
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.schemas.chat import (
@@ -75,3 +77,36 @@ async def send_message(
     except Exception as e:
         print(f"Chat message error: {e}")
         raise HTTPException(500, detail=f"Failed to generate response: {str(e)}")
+
+
+@router.post("/{chat_id}/message/stream")
+async def stream_message(
+    chat_id: str,
+    body: ChatMessageRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """SSE endpoint for streaming chat responses token by token."""
+    try:
+        gen = await chat_service.stream_message(db, chat_id, body.content)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        print(f"[Chat Stream] Setup error: {e}")
+        raise HTTPException(500, detail=f"Failed to prepare stream: {str(e)}")
+
+    async def event_generator():
+        try:
+            async for event in gen:
+                yield f"data: {_json.dumps(event)}\n\n"
+        except Exception as e:
+            print(f"[Chat Stream] Generator error: {e}")
+            yield f"data: {_json.dumps({'type': 'error', 'message': 'Stream interrupted'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

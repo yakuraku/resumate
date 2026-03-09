@@ -10,6 +10,7 @@ export interface AppSettings {
   theme: string;
   default_master_resume_path: string;
   autosave_enabled: boolean;
+  tailor_mode?: string;
 }
 
 export interface SettingsUpdate {
@@ -22,6 +23,7 @@ export interface SettingsUpdate {
   theme?: string;
   default_master_resume_path?: string;
   autosave_enabled?: boolean;
+  tailor_mode?: string;
 }
 
 export interface PromptInfo {

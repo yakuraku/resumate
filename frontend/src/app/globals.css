@@ -317,4 +317,5 @@ html.theme-switching *::after {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
+  border-radius: 3px;
 }

@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -38,3 +39,19 @@ def write_file(path: Path, content: str):
     ensure_directory(path.parent)
     with open(path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def get_context_folder() -> Path:
+    """Returns the configured context folder, defaulting to <project_root>/my_info."""
+    config_path = get_data_dir() / "context_config.json"
+    if config_path.exists():
+        try:
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            folder_str = config.get("folder_path", "")
+            if folder_str:
+                folder = Path(folder_str)
+                if folder.is_absolute() and folder.exists():
+                    return folder
+        except Exception:
+            pass
+    return get_project_root() / "my_info"

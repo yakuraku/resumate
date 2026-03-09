@@ -174,9 +174,18 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
                 onChange={e => setSelectedTemplateId(e.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {templates.map(t => (
+                {/* Master template always first */}
+                {templates.filter(t => t.is_master).map(t => (
                   <option key={t.id} value={t.id}>
-                    {t.name}{t.is_master ? " (Master)" : ""}{t.is_starred ? " ⭐" : ""}
+                    {t.name} (Master){t.is_starred ? " ⭐" : ""}
+                  </option>
+                ))}
+                {/* Choose Later option right below Master */}
+                <option value="">— Choose Later —</option>
+                {/* Remaining non-master templates */}
+                {templates.filter(t => !t.is_master).map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.is_starred ? " ⭐" : ""}
                   </option>
                 ))}
               </select>
