@@ -17,7 +17,8 @@ import { TodaysFocus } from "@/components/dashboard/TodaysFocus";
 import { AchievementsBadges } from "@/components/dashboard/AchievementsBadges";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { ThemeSelector } from "@/components/ThemeSelector";
-import { cn } from "@/lib/utils";
+import { DashboardBackground } from "@/components/dashboard/DashboardBackground";
+import { cn, getContrastColor } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -49,22 +50,15 @@ const STATUS_DOT_COLORS: Record<ApplicationStatus, string> = {
     [ApplicationStatus.DRAFT]: "bg-slate-400",
 };
 
-const getAvatarGradient = (status: ApplicationStatus) => {
-    switch (status) {
-        case ApplicationStatus.APPLIED:
-            return "bg-gradient-to-br from-blue-500 to-blue-600";
-        case ApplicationStatus.INTERVIEWING:
-            return "bg-gradient-to-br from-violet-500 to-violet-600";
-        case ApplicationStatus.OFFER:
-            return "bg-gradient-to-br from-emerald-500 to-emerald-600";
-        case ApplicationStatus.REJECTED:
-            return "bg-gradient-to-br from-red-400 to-red-500";
-        case ApplicationStatus.GHOSTED:
-            return "bg-gradient-to-br from-gray-400 to-gray-500";
-        default:
-            return "bg-gradient-to-br from-slate-400 to-slate-500";
-    }
-};
+const FALLBACK_COLORS = ["#3b82f6","#8b5cf6","#22c55e","#f97316","#ec4899","#06b6d4"];
+function hashFallbackColor(name: string): string {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return FALLBACK_COLORS[Math.abs(h) % FALLBACK_COLORS.length];
+}
+function getAppColor(app: { color?: string | null; company: string }): string {
+    return app.color || hashFallbackColor(app.company);
+}
 
 const getStatusColor = (status: ApplicationStatus) => {
     switch (status) {
@@ -228,8 +222,8 @@ export default function DashboardPage() {
 
     return (
         <div className="relative min-h-screen bg-background antialiased">
-            {/* Dot grid background texture */}
-            <div className="dot-grid fixed inset-0 pointer-events-none opacity-40" aria-hidden="true" />
+            {/* Background animation — type and enabled state from localStorage */}
+            <DashboardBackground />
 
             {/* ── Header ── */}
             <header className="sticky top-0 z-50 w-full border-b border-border bg-background/85 backdrop-blur-md">
@@ -498,10 +492,13 @@ export default function DashboardPage() {
                                         >
                                             <td className="px-6 py-3.5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white font-bold text-xs shadow-sm",
-                                                        getAvatarGradient(app.status as ApplicationStatus)
-                                                    )}>
+                                                    <div
+                                                        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg font-bold text-xs shadow-sm"
+                                                        style={{
+                                                            backgroundColor: getAppColor(app),
+                                                            color: getContrastColor(getAppColor(app)),
+                                                        }}
+                                                    >
                                                         {app.company.charAt(0).toUpperCase()}
                                                     </div>
                                                     <div>

@@ -303,7 +303,7 @@ async def tailor_resume_stream(
                 # Re-fetch with all relations for the final payload
                 final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str)
                 resume_data = ResumeRead.model_validate(final_resume)
-                yield f"data: {_json.dumps({'type': 'persisted', 'resume': resume_data.model_dump()})}\n\n"
+                yield f"data: {_json.dumps({'type': 'persisted', 'resume': resume_data.model_dump(mode='json')})}\n\n"
 
         except Exception as e:
             yield f"data: {_json.dumps({'type': 'error', 'message': f'Failed to save: {str(e)}'})}\n\n"

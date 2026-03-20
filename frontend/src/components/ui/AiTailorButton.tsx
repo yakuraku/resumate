@@ -7,9 +7,10 @@ interface AiTailorButtonProps {
     onClick: () => void;
     disabled?: boolean;
     tailoring?: boolean;
+    accentColor?: string;
 }
 
-export function AiTailorButton({ onClick, disabled, tailoring }: AiTailorButtonProps) {
+export function AiTailorButton({ onClick, disabled, tailoring, accentColor }: AiTailorButtonProps) {
     return (
         <>
             {/* Scoped styles for keyframes + pseudo-elements that can't be inline */}
@@ -32,10 +33,10 @@ export function AiTailorButton({ onClick, disabled, tailoring }: AiTailorButtonP
                     background-image:
                         linear-gradient(var(--secondary), var(--secondary)),
                         linear-gradient(137.48deg,
-                            color-mix(in srgb, var(--primary) 90%, #ffdb3b) 10%,
-                            var(--primary) 45%,
-                            color-mix(in srgb, var(--primary) 60%, #8f51ea) 67%,
-                            color-mix(in srgb, var(--primary) 70%, #0044ff) 87%
+                            color-mix(in srgb, var(--ait-primary, var(--primary)) 90%, #ffdb3b) 10%,
+                            var(--ait-primary, var(--primary)) 45%,
+                            color-mix(in srgb, var(--ait-primary, var(--primary)) 60%, #8f51ea) 67%,
+                            color-mix(in srgb, var(--ait-primary, var(--primary)) 70%, #0044ff) 87%
                         );
                     background-origin: border-box;
                     background-clip: content-box, border-box;
@@ -120,10 +121,10 @@ export function AiTailorButton({ onClick, disabled, tailoring }: AiTailorButtonP
                     z-index: -1;
                 }
                 .ai-tailor-space-btn .ait-circle:nth-of-type(1) {
-                    background: color-mix(in srgb, var(--primary) 60%, transparent);
+                    background: color-mix(in srgb, var(--ait-primary, var(--primary)) 60%, transparent);
                 }
                 .ai-tailor-space-btn .ait-circle:nth-of-type(2) {
-                    background: color-mix(in srgb, var(--primary) 50%, #8f51ea80);
+                    background: color-mix(in srgb, var(--ait-primary, var(--primary)) 50%, #8f51ea80);
                 }
                 .ai-tailor-space-btn:hover:not(:disabled) #ait-container-stars {
                     z-index: 1;
@@ -133,13 +134,13 @@ export function AiTailorButton({ onClick, disabled, tailoring }: AiTailorButtonP
                     transform: scale(1.05);
                 }
                 .ai-tailor-space-btn:active:not(:disabled) {
-                    border: double 3px var(--primary);
+                    border: double 3px var(--ait-primary, var(--primary));
                     background-origin: border-box;
                     background-clip: content-box, border-box;
                     animation: none;
                 }
                 .ai-tailor-space-btn:active:not(:disabled) .ait-circle {
-                    background: var(--primary);
+                    background: var(--ait-primary, var(--primary));
                 }
                 .ai-tailor-space-btn:focus-visible {
                     outline: 2px solid var(--ring);
@@ -170,6 +171,7 @@ export function AiTailorButton({ onClick, disabled, tailoring }: AiTailorButtonP
                 className="ai-tailor-space-btn"
                 onClick={onClick}
                 disabled={disabled}
+                style={accentColor ? ({ "--ait-primary": accentColor } as React.CSSProperties) : undefined}
             >
                 <strong>
                     {tailoring ? (

@@ -269,10 +269,6 @@ export function QAAssistant({ applicationId }: Props) {
                 }
             } else {
                 showToast("Failed to send message", "error");
-                // Remove the optimistic user message only if nothing was received
-                if (!streamingContentRef.current) {
-                    setMessages((prev) => prev.slice(0, -1));
-                }
             }
             streamingContentRef.current = "";
             setStreamingContent("");

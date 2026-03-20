@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { ResumeTemplateService } from "@/services/resume-template.service";
 import type { ResumeTemplate } from "@/types/resume-template";
-import { cn } from "@/lib/utils";
+import { cn, getContrastColor } from "@/lib/utils";
 import { StatusBadge } from "@/components/applications/StatusBadge";
 import { ResumeService } from "@/services/resume.service";
 import { Resume, ResumeVersion } from "@/types/resume";
@@ -37,6 +37,7 @@ import { AgentProgressModal, type AgentEvent } from "@/components/resume/AgentPr
 import { SettingsService } from "@/services/settings.service";
 import { SavePdfButton } from "@/components/ui/SavePdfButton";
 import { AiTailorButton } from "@/components/ui/AiTailorButton";
+import { ColorPicker } from "@/components/shared/ColorPicker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
 
@@ -62,6 +63,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [agentModel, setAgentModel] = useState("");
     const [agentComplete, setAgentComplete] = useState(false);
     const [agentError, setAgentError] = useState(false);
+    const [activeTab, setActiveTab] = useState("editor");
     const abortControllerRef = useRef<AbortController | null>(null);
     const [saving, setSaving] = useState(false);
 
@@ -123,6 +125,11 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [editCompany, setEditCompany] = useState("");
     const [savingTitle, setSavingTitle] = useState(false);
 
+    // Colour picker state
+    const [colorPickerOpen, setColorPickerOpen] = useState(false);
+    const colorPickerRef = useRef<HTMLDivElement>(null);
+    const nativeColorPickerActive = useRef(false);
+
     // Derived: is viewing the active version?
     const versions = resume?.versions ?? [];
     const viewingVersion = versions.find((v) => v.id === viewingVersionId);
@@ -168,6 +175,35 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    // Close colour picker on outside click
+    useEffect(() => {
+        if (!colorPickerOpen) return;
+        const handler = (e: MouseEvent) => {
+            // Suppress while the native OS color dialog is open — Chrome fires
+            // mousedown on underlying DOM elements while the user drags the picker
+            if (nativeColorPickerActive.current) return;
+            if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+                setColorPickerOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [colorPickerOpen]);
+
+    const handleColorChange = useCallback(async (color: string) => {
+        if (!application) return;
+        setColorPickerOpen(false);
+        // Optimistic update
+        setApplication((prev) => prev ? { ...prev, color } : prev);
+        try {
+            const updated = await ApplicationService.updateColor(application.id, color);
+            setApplication(updated);
+        } catch (e) {
+            console.error(e);
+            showToast("Failed to update colour", "error");
+        }
+    }, [application, showToast]);
 
     const doStatusUpdate = useCallback(async (status: string) => {
         if (!application) return;
@@ -714,7 +750,13 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
 
     return (
         <CommandCenter fullHeight>
-            <div className="flex flex-col space-y-6 h-full">
+            <div className="relative flex flex-col space-y-6 h-full">
+                {/* 3px company accent bar — spans full main width by breaking out of padding */}
+                <div
+                    className="absolute -top-6 md:-top-8 -left-6 md:-left-8 -right-6 md:-right-8 h-[3px] pointer-events-none z-10 transition-colors duration-500"
+                    style={{ backgroundColor: application.color || 'transparent' }}
+                />
+
                 {/* Header Section */}
                 <div className="flex items-center justify-between border-b pb-4">
                     <div className="flex items-center gap-4">
@@ -781,6 +823,32 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                         </button>
                                     </div>
                                     <div className="flex items-center gap-2 text-muted-foreground">
+                                        {/* Coloured avatar — click to change colour */}
+                                        <div className="relative" ref={colorPickerRef}>
+                                            <button
+                                                type="button"
+                                                title="Change application colour"
+                                                onClick={() => setColorPickerOpen(v => !v)}
+                                                className="flex items-center justify-center size-6 rounded-md text-xs font-bold shadow-sm hover:opacity-80 transition-opacity flex-shrink-0"
+                                                style={{
+                                                    backgroundColor: application.color || "#64748b",
+                                                    color: getContrastColor(application.color || "#64748b"),
+                                                }}
+                                            >
+                                                {application.company.charAt(0).toUpperCase()}
+                                            </button>
+                                            {colorPickerOpen && (
+                                                <div className="absolute top-full left-0 mt-1.5 z-50">
+                                                    <ColorPicker
+                                                        value={application.color}
+                                                        onChange={handleColorChange}
+                                                        onNativePickerActiveChange={(active) => {
+                                                            nativeColorPickerActive.current = active;
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
                                         <span className="font-medium text-foreground">{application.company}</span>
                                         <span>•</span>
                                 {/* Clickable status selector */}
@@ -839,31 +907,39 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                             onClick={handleTailor}
                             disabled={tailoring || !resume}
                             tailoring={tailoring}
+                            accentColor={application.color || undefined}
                         />
                         <SavePdfButton
                             onClick={handleSave}
                             disabled={saving || !resume}
                             saving={saving}
+                            accentColor={application.color || undefined}
                         />
                     </div>
                 </div>
 
                 {/* Main Workspace */}
-                <Tabs defaultValue="editor" className="flex-1 flex flex-col min-h-0">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-4">
                         <TabsList>
-                            <TabsTrigger value="job" className="gap-2">
-                                <Briefcase className="h-4 w-4" /> Job Context
-                            </TabsTrigger>
-                            <TabsTrigger value="editor" className="gap-2">
-                                <FileText className="h-4 w-4" /> Resume Editor
-                            </TabsTrigger>
-                            <TabsTrigger value="qa" className="gap-2">
-                                <HelpCircle className="h-4 w-4" /> Q&amp;A Assistant
-                            </TabsTrigger>
-                            <TabsTrigger value="interview" className="gap-2">
-                                <MessageSquare className="h-4 w-4" /> Interview Prep
-                            </TabsTrigger>
+                            {([
+                                { value: "job", icon: Briefcase, label: "Job Context" },
+                                { value: "editor", icon: FileText, label: "Resume Editor" },
+                                { value: "qa", icon: HelpCircle, label: "Q & A" },
+                                { value: "interview", icon: MessageSquare, label: "Interview Prep" },
+                            ] as const).map(({ value, icon: Icon, label }) => (
+                                <div key={value} className="relative">
+                                    <TabsTrigger value={value} className="gap-2">
+                                        <Icon className="h-4 w-4" /> {label}
+                                    </TabsTrigger>
+                                    {activeTab === value && application.color && (
+                                        <div
+                                            className="absolute bottom-0.5 left-1.5 right-1.5 h-[2px] rounded-full pointer-events-none"
+                                            style={{ backgroundColor: application.color }}
+                                        />
+                                    )}
+                                </div>
+                            ))}
                         </TabsList>
                     </div>
 
@@ -1391,6 +1467,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     setAgentModalOpen(false);
                 }}
                 onCheckResume={() => {
+                    setActiveTab("editor");
                     setAgentModalOpen(false);
                 }}
                 isComplete={agentComplete}

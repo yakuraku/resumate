@@ -107,3 +107,6 @@ design:
 
 #### 2026-03-09
 **2026-03-09**: Used work_experience.md, Plantopia-main_summary.md and teaching_smaller_models_how_to_think_summary.md to prioritize LLM, RAG, LoRA and quantization experience. Rewrote bullets to match Binance JD keywords, emphasized end-to-end LLM pipelines, prompt engineering, evaluation and multi-GPU inference while keeping only factual items from provided files.
+
+#### 2026-03-20
+**2026-03-20**: I used work_experience.md and Plantopia-main_summary.md as primary sources for technical and project details. I rewrote bullets to match REA Graduate streams by prioritizing TypeScript, cloud-native, full-stack and data engineering keywords and emphasised collaborative, agile and learning-focused summary.

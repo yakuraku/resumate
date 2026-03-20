@@ -36,6 +36,7 @@ class Application(BaseModel):
         ForeignKey("resume_templates.id", ondelete="SET NULL"), nullable=True
     )
     resume_snapshot_yaml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     # Relationships
     resume: Mapped["Resume | None"] = relationship(back_populates="application", uselist=False)

@@ -77,4 +77,10 @@ export const ApplicationService = {
     const response = await apiClient.put<ApplicationResponse>(`/applications/${id}/resume-template`, { resume_template_id });
     return response.data;
   },
+
+  // Update color for an application and all apps at the same company
+  updateColor: async (id: string, color: string | null): Promise<ApplicationResponse> => {
+    const response = await apiClient.patch<ApplicationResponse>(`/applications/${id}/color`, { color });
+    return response.data;
+  },
 };
