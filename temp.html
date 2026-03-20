@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Deep Resonance: AI-Powered Profile Synthesis</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Fira+Code:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2b6cee",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0a0a0a",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "mono": ["Fira Code", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @keyframes circuitFlow {
+            0% { background-position: 0% 0%; }
+            100% { background-position: 100% 100%; }
+        }
+        .circuit-bg {
+            background-image: radial-gradient(circle at 2px 2px, rgba(43, 108, 238, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+            animation: circuitFlow 60s linear infinite;
+        }
+        .scanline {
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.02) 50%);
+            background-size: 100% 4px;
+        }
+        .node-pulse {
+            animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.1); }
+        }
+        .data-stream {
+            stroke-dasharray: 100;
+            animation: dash 5s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -200; }
+        }
+    </style>
+</head>
+<body class="bg-background-dark font-display antialiased overflow-hidden">
+<div class="fixed inset-0 z-0 opacity-40 blur-xl scale-110">
+<div class="max-w-6xl mx-auto p-12 space-y-8">
+<div class="h-12 w-48 bg-slate-800 rounded"></div>
+<div class="grid grid-cols-3 gap-8">
+<div class="col-span-2 space-y-6">
+<div class="h-64 bg-slate-800 rounded-xl"></div>
+<div class="h-96 bg-slate-800 rounded-xl"></div>
+</div>
+<div class="space-y-6">
+<div class="h-48 bg-slate-800 rounded-xl"></div>
+<div class="h-48 bg-slate-800 rounded-xl"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4">
+<div class="w-full max-w-[800px] bg-neutral-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden flex flex-col">
+<div class="flex items-center justify-between px-6 py-4 border-b border-white/10">
+<div class="flex items-center gap-3">
+<div class="p-1.5 bg-primary/10 rounded">
+<span class="material-symbols-outlined text-primary text-xl">psychology</span>
+</div>
+<h2 class="text-white text-lg font-bold tracking-tight">Deep Resonance: AI-Powered Profile Synthesis</h2>
+</div>
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<div class="flex flex-col md:flex-row h-[520px]">
+<div class="w-full md:w-[40%] bg-neutral-950/50 flex flex-col items-center justify-center border-r border-white/5 p-8 relative overflow-hidden circuit-bg">
+<div class="relative w-full h-64 flex items-center justify-center">
+<svg class="w-full h-full" viewBox="0 0 200 200">
+<path class="data-stream" d="M40,100 L100,40 M40,100 L100,100 M40,100 L100,160 M100,40 L160,100 M100,100 L160,100 M100,160 L160,100" fill="none" stroke="rgba(43, 108, 238, 0.2)" stroke-width="1"></path>
+<circle class="node-pulse" cx="40" cy="100" fill="#2b6cee" r="4"></circle>
+<circle class="node-pulse" cx="100" cy="40" fill="#2b6cee" r="3" style="animation-delay: -1s;"></circle>
+<circle class="node-pulse" cx="100" cy="100" fill="#2b6cee" r="3" style="animation-delay: -2s;"></circle>
+<circle class="node-pulse" cx="100" cy="160" fill="#2b6cee" r="3" style="animation-delay: -3.5s;"></circle>
+<circle class="node-pulse" cx="160" cy="100" fill="#60a5fa" r="5" style="animation-delay: -0.5s;"></circle>
+</svg>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-24 h-24 border border-primary/20 rounded-full animate-[spin_10s_linear_infinite]"></div>
+<div class="absolute w-32 h-32 border-t-2 border-primary/40 rounded-full animate-[spin_15s_linear_infinite_reverse]"></div>
+</div>
+</div>
+<div class="mt-8 text-center space-y-3 z-10 px-4">
+<p class="text-white font-bold text-sm tracking-widest uppercase">Network Synchronized</p>
+<p class="text-slate-400 text-xs leading-relaxed">Analyzing millions of data points to craft your ideal narrative.</p>
+</div>
+<div class="absolute top-0 left-0 w-8 h-8 border-t border-l border-white/10"></div>
+<div class="absolute bottom-0 right-0 w-8 h-8 border-b border-r border-white/10"></div>
+</div>
+<div class="w-full md:w-[60%] bg-black p-6 font-mono text-[12px] relative overflow-hidden flex flex-col">
+<div class="scanline absolute inset-0 pointer-events-none"></div>
+<div class="flex-1 space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Initiating vector embedding...</span>
+<span class="text-emerald-500 ml-auto font-bold">[READY]</span>
+</div>
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Cross-referencing knowledge graph...</span>
+<span class="text-slate-500 ml-auto">842 nodes mapped</span>
+</div>
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Executing multi-agent review protocols...</span>
+<span class="text-emerald-500 ml-auto">OK</span>
+</div>
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Parsing semantic intent in "projects.md"</span>
+<span class="text-emerald-500 ml-auto">✓</span>
+</div>
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Synthesizing optimal keyword density...</span>
+<span class="text-emerald-500 ml-auto">98.4%</span>
+</div>
+<div class="flex gap-3">
+<span class="text-amber-500">!</span>
+<span class="text-slate-300">Verifying alignment with JD requirements</span>
+<span class="text-rose-500 ml-auto">RETRYING</span>
+</div>
+<div class="pl-7 text-rose-400/80 text-[10px] leading-tight">
+                        &gt; Warning: Soft skill weighting requires normalization<br/>
+                        &gt; Applying heuristic correction...
+                    </div>
+<div class="flex gap-3">
+<span class="text-primary opacity-50">$</span>
+<span class="text-slate-300">Finalizing profile architecture...</span>
+<span class="text-emerald-500 ml-auto">SUCCESS</span>
+</div>
+<div class="flex gap-3 items-center">
+<span class="text-primary animate-pulse">_</span>
+<span class="text-white font-bold uppercase tracking-wider">Generating neural output</span>
+<span class="inline-block w-2 h-4 bg-primary ml-2 animate-pulse"></span>
+</div>
+</div>
+<div class="mt-6 space-y-3 border-t border-white/10 pt-4">
+<div class="flex justify-between text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
+<span>Synthesis Status</span>
+<span class="text-primary">94%</span>
+</div>
+<div class="h-1.5 w-full bg-neutral-900 rounded-full overflow-hidden p-[1px] border border-white/5">
+<div class="h-full bg-gradient-to-r from-blue-700 to-primary w-[94%] shadow-[0_0_12px_rgba(43,108,238,0.8)] rounded-full"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="px-6 py-4 bg-neutral-950 border-t border-white/10 flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Processing Layer 07</span>
+</div>
+<div class="flex gap-3">
+<button class="px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-500 hover:text-white transition-colors">
+                    Abort
+                </button>
+<button class="px-6 py-2.5 text-xs font-bold uppercase tracking-widest bg-primary hover:bg-primary/90 text-white rounded-lg transition-all shadow-lg shadow-primary/30 flex items-center gap-2">
+<span>View Output</span>
+<span class="material-symbols-outlined text-sm">terminal</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+
+</body></html>

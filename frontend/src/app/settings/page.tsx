@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { useBackgroundAnimation } from "@/hooks/useBackgroundAnimation";
 import { CommandCenter } from "@/components/layout/CommandCenter";
 import { useTheme } from "@/components/theme-provider";
 import { SettingsService, AppSettings, SettingsUpdate, PromptsData } from "@/services/settings.service";
@@ -64,6 +65,7 @@ const PROMPT_KEYS = ["resume_tailoring", "qa_generate", "qa_rewrite", "qa_saved"
 
 export default function SettingsPage() {
     const { theme, setTheme } = useTheme();
+    const { enabled: bgEnabled, animationType, setEnabled: setBgEnabled, setAnimationType } = useBackgroundAnimation();
     const [settings, setSettings] = useState<AppSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -358,6 +360,56 @@ export default function SettingsPage() {
                                         ))}
                                     </div>
                                 </div>
+                            </div>
+                        </section>
+
+                        {/* Background Animation */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Background Animation</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Animated background on the dashboard. Purely visual — does not affect performance on modern hardware.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-5">
+                                {/* Toggle */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Enable Animation</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Show an animated background on the dashboard.</p>
+                                    </div>
+                                    <Switch
+                                        checked={bgEnabled}
+                                        onCheckedChange={setBgEnabled}
+                                    />
+                                </div>
+
+                                {/* Animation type picker — only shown when enabled */}
+                                {bgEnabled && (
+                                    <div className="space-y-2">
+                                        <p className="text-sm font-medium">Animation Style</p>
+                                        <div className="flex gap-2 p-1 rounded-lg bg-muted/60 border border-border w-fit">
+                                            {(["particles", "galaxy"] as const).map((type) => (
+                                                <button
+                                                    key={type}
+                                                    onClick={() => setAnimationType(type)}
+                                                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
+                                                        animationType === type
+                                                            ? "bg-card text-foreground shadow-sm border border-border"
+                                                            : "text-muted-foreground hover:text-foreground"
+                                                    }`}
+                                                >
+                                                    {type === "particles" ? "✦ Particles" : "✺ Galaxy"}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            {animationType === "particles"
+                                                ? "Floating 3D point cloud that drifts and rotates. Colors follow your active theme."
+                                                : "Procedural star field with twinkling and depth layers. Hue-shifts to match your theme."}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </section>
 

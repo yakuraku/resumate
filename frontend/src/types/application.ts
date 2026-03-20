@@ -16,6 +16,7 @@ export interface ApplicationBase {
   source_url?: string;
   notes?: string;
   applied_date?: string; // Date string YYYY-MM-DD
+  color?: string; // hex e.g. "#3b82f6"
 }
 
 export type ApplicationCreate = ApplicationBase;
@@ -29,6 +30,7 @@ export interface ApplicationUpdate {
   source_url?: string;
   notes?: string;
   applied_date?: string;
+  color?: string;
 }
 
 export interface ApplicationResponse extends ApplicationBase {

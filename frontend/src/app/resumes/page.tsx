@@ -26,7 +26,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import { ResumeTemplateService } from "@/services/resume-template.service"
 import type { ResumeTemplate, ResumeTemplateDetail, LinkedApplicationSummary } from "@/types/resume-template"
-import { ApplicationStatus } from "@/types/application"
+import { ApplicationStatus, ApplicationResponse } from "@/types/application"
+import { ResumeService } from "@/services/resume.service"
+import { ApplicationService } from "@/services/application.service"
+import type { Resume } from "@/types/resume"
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -817,6 +820,10 @@ export default function ResumesPage() {
   const [search, setSearch] = useState("")
   const [toasts, setToasts] = useState<Toast[]>([])
 
+  // Application resumes state
+  const [appResumes, setAppResumes] = useState<Resume[]>([])
+  const [appMap, setAppMap] = useState<Map<string, ApplicationResponse>>(new Map())
+
   // Dialog state
   const [editorTarget, setEditorTarget] = useState<ResumeTemplate | null>(null)
   const [newResumeOpen, setNewResumeOpen] = useState(false)
@@ -847,6 +854,29 @@ export default function ResumesPage() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchTemplates() }, [fetchTemplates])
+
+  // Fetch application resumes + applications in parallel
+  useEffect(() => {
+    async function fetchAppResumes() {
+      try {
+        const [resumes, appsResp] = await Promise.all([
+          ResumeService.getAll(),
+          ApplicationService.getAll(1, 1000),
+        ])
+        const map = new Map<string, ApplicationResponse>()
+        appsResp.items.forEach((a) => map.set(a.id, a))
+        // Sort by most recently updated first
+        const sorted = [...resumes].sort(
+          (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        )
+        setAppResumes(sorted)
+        setAppMap(map)
+      } catch {
+        // Non-critical — don't block the page
+      }
+    }
+    fetchAppResumes()
+  }, [])
 
   // Debounced server-side search
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1013,6 +1043,50 @@ export default function ResumesPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Application Resumes ── */}
+        {appResumes.length > 0 && (
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Application Resumes
+              </h2>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
+                AI-tailored resumes attached to your job applications
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {appResumes.map((r) => {
+                const app = appMap.get(r.application_id)
+                const title = app ? `${app.role} @ ${app.company}` : "Untitled Application"
+                const activeVersion = r.versions?.find((v) => v.is_active)
+                const versionLabel = activeVersion?.label ?? (r.versions?.length ? `v${r.versions.length}` : "v1")
+                return (
+                  <a
+                    key={r.id}
+                    href={`/applications/${r.application_id}`}
+                    className="group relative rounded-xl border border-border bg-card p-5 cursor-pointer hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary block"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-5 w-5 text-primary shrink-0" />
+                        <span className="font-semibold text-base leading-tight truncate">{title}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mb-4 flex-wrap">
+                      {app && <StatusBadge status={app.status as ApplicationStatus} />}
+                      <span className="text-xs text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full">{versionLabel}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Updated {timeAgo(r.updated_at)}</span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-150" />
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

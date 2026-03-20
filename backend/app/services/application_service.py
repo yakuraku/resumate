@@ -119,6 +119,23 @@ class ApplicationService:
         await self.db.refresh(app)
         return app
 
+    async def update_color(self, id: str, color: Optional[str]) -> Optional[Application]:
+        """Update color for all applications sharing the same company name."""
+        app = await self.get(id)
+        if not app:
+            return None
+
+        company = app.company
+        result = await self.db.execute(
+            select(Application).where(Application.company == company)
+        )
+        apps = result.scalars().all()
+        for a in apps:
+            a.color = color
+        await self.db.commit()
+        await self.db.refresh(app)
+        return app
+
     async def update_application_resume_template(
         self, id: str, resume_template_id: Optional[str]
     ) -> Optional[Application]:

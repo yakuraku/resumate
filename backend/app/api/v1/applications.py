@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationListResponse, ApplicationUpdate
+from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationListResponse, ApplicationUpdate, ColorUpdate
 from app.schemas.resume import ResumeCreateRequest, ResumeRead
 from app.schemas.resume_template import ApplicationStatusUpdate, ApplicationResumeTemplateUpdate
 from app.services.application_service import ApplicationService
@@ -138,6 +138,20 @@ async def update_application_status(
     """Update the status of an application. Snapshots resume YAML when transitioning to 'applied'."""
     service = ApplicationService(db)
     return await service.update_application_status(id, data.status)
+
+
+@router.patch("/{id}/color", response_model=ApplicationResponse)
+async def update_application_color(
+    id: str,
+    data: ColorUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update color for an application and all others at the same company."""
+    service = ApplicationService(db)
+    app = await service.update_color(id, data.color)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return app
 
 
 @router.put("/{id}/resume-template", response_model=ApplicationResponse)

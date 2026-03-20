@@ -286,6 +286,6 @@ class LLMService:
                                 continue
             except httpx.HTTPError as e:
                 print(f"LLM Stream Error: {e}")
-                yield f"\n[Error: {str(e)}]"
+                raise
 
 llm_service = LLMService()

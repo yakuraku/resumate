@@ -164,3 +164,9 @@ export function getRecentDrafts(apps: ApplicationResponse[], n = 2): Application
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         .slice(0, n);
 }
+
+export function getRecentApplications(apps: ApplicationResponse[], n = 3): ApplicationResponse[] {
+    return [...apps]
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, n);
+}

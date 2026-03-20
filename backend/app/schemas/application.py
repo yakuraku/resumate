@@ -20,6 +20,7 @@ class ApplicationBase(BaseModel):
     source_url: Optional[str] = None
     notes: Optional[str] = None
     applied_date: Optional[date] = None
+    color: Optional[str] = None
 
 class ApplicationCreate(ApplicationBase):
     pass
@@ -33,6 +34,10 @@ class ApplicationUpdate(BaseModel):
     source_url: Optional[str] = None
     notes: Optional[str] = None
     applied_date: Optional[date] = None
+    color: Optional[str] = None
+
+class ColorUpdate(BaseModel):
+    color: Optional[str] = None
 
 class ApplicationResponse(ApplicationBase):
     id: str
