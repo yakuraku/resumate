@@ -1,10 +1,14 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
+from sqlalchemy.orm import selectinload
 from app.models import Application
+from app.models.resume import Resume, ResumeVersion
+from app.models.resume_template import ResumeTemplate
 from app.schemas.application import ApplicationCreate, ApplicationUpdate
 from typing import Optional, List, Tuple
 from fastapi import HTTPException
 from datetime import date, timedelta
+import uuid
 
 class ApplicationService:
     def __init__(self, db: AsyncSession):
@@ -77,14 +81,72 @@ class ApplicationService:
         await self.db.refresh(app)
         return app
 
-    async def delete(self, id: str) -> bool:
-        app = await self.get(id)
+    async def delete(self, id: str) -> Optional[str]:
+        """
+        Delete an application and all its owned data.
+
+        Before deleting, checks if the application has a tailored resume
+        (any version with source != 'master'). If so, saves the active
+        version's YAML as a new ResumeTemplate so the user doesn't lose work.
+
+        Returns:
+            The name of the saved ResumeTemplate if one was created,
+            or None if no tailored resume existed.
+            Raises a ValueError if the application is not found.
+        """
+        # Load application with its resume and versions in one query
+        result = await self.db.execute(
+            select(Application)
+            .where(Application.id == id)
+            .options(
+                selectinload(Application.resume).selectinload(Resume.versions)
+            )
+        )
+        app = result.scalars().first()
         if not app:
-            return False
+            raise ValueError("Application not found")
+
+        saved_template_name: Optional[str] = None
+
+        # Check if there is a tailored (non-master-only) resume to preserve
+        if app.resume and app.resume.versions:
+            non_master_versions = [
+                v for v in app.resume.versions
+                if v.source != "master"
+            ]
+            if non_master_versions:
+                # Get the YAML from the active version
+                active_version = next(
+                    (v for v in app.resume.versions if v.is_active), None
+                ) or app.resume.versions[-1]
+                yaml_to_save = active_version.yaml_content
+
+                # Build a unique template name
+                base_name = f"{app.role} at {app.company}"
+                template_name = base_name
+                counter = 2
+                while True:
+                    existing = await self.db.execute(
+                        select(ResumeTemplate).where(ResumeTemplate.name == template_name)
+                    )
+                    if not existing.scalars().first():
+                        break
+                    template_name = f"{base_name} ({counter})"
+                    counter += 1
+
+                new_template = ResumeTemplate(
+                    id=str(uuid.uuid4()),
+                    name=template_name,
+                    yaml_content=yaml_to_save,
+                    is_master=False,
+                    is_starred=False,
+                )
+                self.db.add(new_template)
+                saved_template_name = template_name
 
         await self.db.delete(app)
         await self.db.commit()
-        return True
+        return saved_template_name
 
     async def update_application_status(self, id: str, status: str) -> Optional[Application]:
         """

@@ -110,3 +110,6 @@ design:
 
 #### 2026-03-20
 **2026-03-20**: I used work_experience.md and Plantopia-main_summary.md as primary sources for technical and project details. I rewrote bullets to match REA Graduate streams by prioritizing TypeScript, cloud-native, full-stack and data engineering keywords and emphasised collaborative, agile and learning-focused summary.
+
+#### 2026-03-21
+**2026-03-21**: Used work_experience.md and Plantopia-main_summary.md as primary sources; emphasized full-stack product ownership, AI-native workflows, LLM/RAG experience, cloud/serverless skills, and Melbourne timezone ownership to match the job description; reordered skills to prioritise Full-Stack, Cloud, and LLM keywords for ATS alignment.

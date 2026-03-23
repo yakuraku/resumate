@@ -15,9 +15,10 @@ import {
     ArrowLeft, ExternalLink, Briefcase, FileText, Download, BrainCircuit,
     Loader2, MessageSquare, AlertTriangle, RefreshCw,
     HelpCircle, RotateCcw, ThumbsUp, X, ChevronDown, Check, Info,
-    BookOpen, Star, Pencil
+    BookOpen, Star, Pencil, MoreHorizontal, Trash2
 } from "lucide-react";
 import { ResumeTemplateService } from "@/services/resume-template.service";
+import { DeleteApplicationModal } from "@/components/applications/DeleteApplicationModal";
 import type { ResumeTemplate } from "@/types/resume-template";
 import { cn, getContrastColor } from "@/lib/utils";
 import { StatusBadge } from "@/components/applications/StatusBadge";
@@ -129,6 +130,32 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const colorPickerRef = useRef<HTMLDivElement>(null);
     const nativeColorPickerActive = useRef(false);
+
+    // Edit dropdown & delete modal state
+    const [editDropdownOpen, setEditDropdownOpen] = useState(false);
+    const editDropdownRef = useRef<HTMLDivElement>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (editDropdownRef.current && !editDropdownRef.current.contains(e.target as Node)) {
+                setEditDropdownOpen(false);
+            }
+        };
+        if (editDropdownOpen) document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [editDropdownOpen]);
+
+    const handleDeleteConfirm = async () => {
+        if (!application) return;
+        const result = await ApplicationService.delete(application.id);
+        setDeleteModalOpen(false);
+        if (result.saved_template_name) {
+            showToast(`Application deleted. Tailored resume saved as "${result.saved_template_name}" in Resume Templates.`);
+        }
+        // Navigate back after a brief moment so the toast is visible
+        setTimeout(() => router.push("/dashboard"), 800);
+    };
 
     // Derived: is viewing the active version?
     const versions = resume?.versions ?? [];
@@ -810,17 +837,45 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                 <div className="group/title">
                                     <div className="flex items-center gap-1.5">
                                         <h1 className="text-2xl font-bold tracking-tight">{application.role}</h1>
-                                        <button
-                                            onClick={() => {
-                                                setEditRole(application.role);
-                                                setEditCompany(application.company);
-                                                setIsEditingTitle(true);
-                                            }}
-                                            title="Rename application"
-                                            className="opacity-0 group-hover/title:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+                                        <div
+                                            className="relative opacity-0 group-hover/title:opacity-100 transition-opacity"
+                                            ref={editDropdownRef}
                                         >
-                                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                                        </button>
+                                            <button
+                                                onClick={() => setEditDropdownOpen((v) => !v)}
+                                                title="Edit application"
+                                                className="p-1 rounded hover:bg-muted"
+                                            >
+                                                <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                                            </button>
+                                            {editDropdownOpen && (
+                                                <div className="absolute left-0 top-full mt-1 z-30 w-44 rounded-lg border border-border bg-card shadow-lg py-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditDropdownOpen(false);
+                                                            setEditRole(application.role);
+                                                            setEditCompany(application.company);
+                                                            setIsEditingTitle(true);
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-muted transition-colors"
+                                                    >
+                                                        <Pencil size={13} />
+                                                        Edit Details
+                                                    </button>
+                                                    <div className="my-1 border-t border-border" />
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditDropdownOpen(false);
+                                                            setDeleteModalOpen(true);
+                                                        }}
+                                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                        Delete Application
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-2 text-muted-foreground">
                                         {/* Coloured avatar — click to change colour */}
@@ -1437,6 +1492,16 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Delete Modal */}
+            {application && (
+                <DeleteApplicationModal
+                    open={deleteModalOpen}
+                    onClose={() => setDeleteModalOpen(false)}
+                    onConfirm={handleDeleteConfirm}
+                    application={application}
+                />
             )}
 
             {/* Toast Notifications */}

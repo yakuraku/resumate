@@ -39,11 +39,15 @@ class Application(BaseModel):
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     # Relationships
-    resume: Mapped["Resume | None"] = relationship(back_populates="application", uselist=False)
+    resume: Mapped["Resume | None"] = relationship(
+        back_populates="application", uselist=False, cascade="all, delete-orphan"
+    )
     resume_template: Mapped["ResumeTemplate | None"] = relationship(
         back_populates="applications"
     )
-    chat_histories: Mapped[list["ChatHistory"]] = relationship(back_populates="application")
+    chat_histories: Mapped[list["ChatHistory"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan"
+    )
     interviews: Mapped[list["InterviewSession"]] = relationship(back_populates="application", cascade="all, delete-orphan")
     questions: Mapped[list["ApplicationQuestion"]] = relationship(back_populates="application", cascade="all, delete-orphan")
     credential: Mapped["ApplicationCredential | None"] = relationship(

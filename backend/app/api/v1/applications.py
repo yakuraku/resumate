@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationListResponse, ApplicationUpdate, ColorUpdate
+from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationListResponse, ApplicationUpdate, ColorUpdate, ApplicationDeleteResponse
 from app.schemas.resume import ResumeCreateRequest, ResumeRead
 from app.schemas.resume_template import ApplicationStatusUpdate, ApplicationResumeTemplateUpdate
 from app.services.application_service import ApplicationService
@@ -52,15 +52,17 @@ async def update_application(
         raise HTTPException(status_code=404, detail="Application not found")
     return app
 
-@router.delete("/{id}", status_code=204)
+@router.delete("/{id}", response_model=ApplicationDeleteResponse)
 async def delete_application(
     id: str,
     db: AsyncSession = Depends(get_db)
 ):
     service = ApplicationService(db)
-    success = await service.delete(id)
-    if not success:
+    try:
+        saved_template_name = await service.delete(id)
+    except ValueError:
         raise HTTPException(status_code=404, detail="Application not found")
+    return ApplicationDeleteResponse(saved_template_name=saved_template_name)
 
 @router.get("/{id}/resume", response_model=ResumeRead)
 async def get_application_resume(

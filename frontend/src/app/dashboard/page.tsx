@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useEffect } from "react";
-import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User, Pencil, X, Loader2 } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Search, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User, Pencil, X, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { ApplicationService } from "@/services/application.service";
 import { CreateApplicationModal } from "@/components/applications/CreateApplicationModal";
+import { DeleteApplicationModal } from "@/components/applications/DeleteApplicationModal";
 import { ApplicationResponse, ApplicationStatus } from "@/types/application";
 import { SkeletonTable } from "@/components/shared/Skeletons";
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -109,14 +110,38 @@ export default function DashboardPage() {
         return () => document.removeEventListener("click", handler);
     }, []);
 
-    const handleDelete = async (id: string) => {
-        if (confirm("Are you sure you want to delete this application?")) {
-            try {
-                await ApplicationService.delete(id);
-                refetch();
-            } catch (error) {
-                console.error("Failed to delete application:", error);
+    // Toast
+    const [toasts, setToasts] = useState<Array<{ id: string; message: string; variant: "default" | "error" }>>([]);
+    const showToast = (message: string, variant: "default" | "error" = "default") => {
+        const id = Math.random().toString(36).slice(2);
+        setToasts((t) => [...t, { id, message, variant }]);
+        setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+    };
+
+    // Delete modal
+    const [deletingApp, setDeletingApp] = useState<ApplicationResponse | null>(null);
+    const [editDropdownOpen, setEditDropdownOpen] = useState<string | null>(null);
+    const editDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (editDropdownRef.current && !editDropdownRef.current.contains(e.target as Node)) {
+                setEditDropdownOpen(null);
             }
+        };
+        if (editDropdownOpen) document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [editDropdownOpen]);
+
+    const handleDeleteConfirm = async () => {
+        if (!deletingApp) return;
+        const result = await ApplicationService.delete(deletingApp.id);
+        setDeletingApp(null);
+        refetch();
+        if (result.saved_template_name) {
+            showToast(`Application deleted. Tailored resume saved as "${result.saved_template_name}" in Resume Templates.`);
+        } else {
+            showToast("Application deleted successfully.");
         }
     };
 
@@ -529,21 +554,49 @@ export default function DashboardPage() {
                                                 {app.location || <span className="text-muted-foreground/40 italic text-xs">Not specified</span>}
                                             </td>
                                             <td className="px-6 py-3.5 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div
+                                                    className="relative flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    ref={editDropdownOpen === app.id ? editDropdownRef : undefined}
+                                                >
                                                     <button
-                                                        onClick={(e) => openRenameModal(app, e)}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditDropdownOpen(editDropdownOpen === app.id ? null : app.id);
+                                                        }}
                                                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                                                        title="Rename"
+                                                        title="Edit"
                                                     >
-                                                        <Pencil size={14} />
+                                                        <MoreHorizontal size={14} />
                                                     </button>
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
-                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <Trash2 size={14} />
-                                                    </button>
+                                                    {editDropdownOpen === app.id && (
+                                                        <div
+                                                            className="absolute right-0 top-full mt-1 z-30 w-40 rounded-lg border border-border bg-card shadow-lg py-1"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    setEditDropdownOpen(null);
+                                                                    openRenameModal(app, e);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-muted transition-colors"
+                                                            >
+                                                                <Pencil size={13} />
+                                                                Edit Details
+                                                            </button>
+                                                            <div className="my-1 border-t border-border" />
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEditDropdownOpen(null);
+                                                                    setDeletingApp(app);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -592,6 +645,33 @@ export default function DashboardPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Delete Modal */}
+            {deletingApp && (
+                <DeleteApplicationModal
+                    open={true}
+                    onClose={() => setDeletingApp(null)}
+                    onConfirm={handleDeleteConfirm}
+                    application={deletingApp}
+                />
+            )}
+
+            {/* Toasts */}
+            <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
+                {toasts.map((t) => (
+                    <div
+                        key={t.id}
+                        className={[
+                            "px-4 py-3 rounded-lg border shadow-lg text-sm max-w-sm pointer-events-auto",
+                            t.variant === "error"
+                                ? "bg-red-900/90 border-red-700 text-red-100"
+                                : "bg-card border-border text-foreground",
+                        ].join(" ")}
+                    >
+                        {t.message}
+                    </div>
+                ))}
+            </div>
 
             {/* Rename Modal */}
             {renamingApp && (

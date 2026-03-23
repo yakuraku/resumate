@@ -301,7 +301,12 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => {
+              setOpen(false)
+              setFormData({ company: "", role: "", location: "", source_url: "", job_description: "", notes: "" })
+              setSelectedTemplateId("")
+              setError(null)
+            }}>
               Cancel
             </Button>
             <Button
