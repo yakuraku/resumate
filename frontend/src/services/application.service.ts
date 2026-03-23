@@ -55,9 +55,10 @@ export const ApplicationService = {
     return response.data;
   },
 
-  // Delete an application
-  delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/applications/${id}`);
+  // Delete an application. Returns the name of the saved template if a tailored resume was preserved.
+  delete: async (id: string): Promise<{ saved_template_name: string | null }> => {
+    const response = await apiClient.delete<{ saved_template_name: string | null }>(`/applications/${id}`);
+    return response.data;
   },
 
   // Analyze the job description for keywords and match score

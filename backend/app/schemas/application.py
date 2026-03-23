@@ -53,3 +53,8 @@ class ApplicationListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+class ApplicationDeleteResponse(BaseModel):
+    """Returned after a successful application deletion."""
+    saved_template_name: Optional[str] = None
+    """Name of the ResumeTemplate that was saved from the tailored resume, or None."""

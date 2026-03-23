@@ -39,7 +39,8 @@ Rules:
 - Rewrite bullet points with JD action verbs and relevant keywords
 - Reorder skills to prioritize JD-relevant ones first
 - Keep YAML structure exactly as RenderCV 2.3 expects
-- reasoning must be ≤3 sentences: which files were most useful, key decisions made"""
+- reasoning must be ≤3 sentences: which files were most useful, key decisions made
+- If the user message contains a "User-Defined Tailoring Rules" section, every rule listed there is mandatory and overrides all defaults — apply them without exception throughout the entire resume"""
 
 AGENT_TOOLS = [
     {

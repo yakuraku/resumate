@@ -30,6 +30,7 @@ class ResumeService:
             raise HTTPException(status_code=400, detail="Resume already exists for this application")
 
         yaml_content = ""
+        initial_label_prefix = "Master"  # default; overridden when a named template is used
 
         if clone_from_id:
             source_resume = await db.get(Resume, clone_from_id)
@@ -48,6 +49,10 @@ class ResumeService:
                 template = tmpl_result.scalars().first()
                 if template and template.yaml_content:
                     yaml_content = template.yaml_content
+                    # Use the template's name as the label prefix so the initial version
+                    # shows e.g. "AI Trainer | Data Scientist v1" instead of "Master v1"
+                    if template.name and template.name.strip():
+                        initial_label_prefix = template.name.strip()
 
             # Fall back to master resume file if no template content was found
             if not yaml_content:
@@ -57,6 +62,7 @@ class ResumeService:
                 except Exception as e:
                     yaml_content = "cv:\n  name: Your Name\n"
                     print(f"Warning: Could not read master resume: {e}")
+                # Keep initial_label_prefix as "Master" since we fell back to the master file
 
         new_resume = Resume(
             application_id=application_id,
@@ -77,7 +83,7 @@ class ResumeService:
             change_summary="Initial creation",
             source=VersionSource.MASTER,
             is_active=True,
-            label=self._generate_label(VersionSource.MASTER, 1)
+            label=f"{initial_label_prefix} v1"
         )
         db.add(first_version)
         await db.commit()
