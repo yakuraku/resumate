@@ -16,7 +16,7 @@ export function StatsCards({ applications, isLoading }: StatsCardsProps) {
     const todayCount = useMemo(() => getTodayCount(applications), [applications]);
     const totalCount = applications.length;
     const activeCount = useMemo(() => applications.filter(a =>
-        a.status === ApplicationStatus.APPLIED || a.status === ApplicationStatus.INTERVIEWING || a.status === ApplicationStatus.OFFER
+        a.status === ApplicationStatus.APPLIED || a.status === ApplicationStatus.SCREENING || a.status === ApplicationStatus.INTERVIEWING || a.status === ApplicationStatus.OFFER
     ).length, [applications]);
     const currentStreak = useMemo(() => getCurrentStreak(applications), [applications]);
     const longestStreak = useMemo(() => getLongestStreak(applications), [applications]);

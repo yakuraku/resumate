@@ -8,7 +8,7 @@ from app.models.application import Application
 from app.models.resume import Resume
 from app.schemas.questions import QuestionCreate, QuestionUpdate
 from app.services.llm_service import llm_service
-from app.services.prompts import APPLICATION_QA_SYSTEM_PROMPT, APPLICATION_QA_USER_PROMPT_TEMPLATE, get_active_prompt
+from app.services.prompts import APPLICATION_QA_SYSTEM_PROMPT, APPLICATION_QA_USER_PROMPT_TEMPLATE, REFINE_ANSWER_SYSTEM_PROMPT, get_active_prompt
 from app.services.tailor_rule_service import tailor_rule_service
 
 
@@ -157,12 +157,7 @@ class QuestionsService:
         if not question.answer_text:
             raise HTTPException(status_code=400, detail="No existing answer to refine. Generate one first.")
 
-        refine_system_prompt = (
-            "You are a professional career coach helping candidates refine their job application answers. "
-            "Given an existing answer and a refinement instruction, produce an improved version of the answer. "
-            "Keep the same core content and facts but apply the requested changes. "
-            "Return ONLY the refined answer text — no preamble, no labels, no quotes."
-        )
+        refine_system_prompt = REFINE_ANSWER_SYSTEM_PROMPT
         rules = await tailor_rule_service.get_enabled_rule_texts(db, application_id=question.application_id)
         if rules:
             rules_text = "\n".join(f"- {r}" for r in rules)

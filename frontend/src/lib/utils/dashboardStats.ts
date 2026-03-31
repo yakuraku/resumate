@@ -146,6 +146,7 @@ export function getPipelineCounts(apps: ApplicationResponse[]): Record<Applicati
     const counts: Record<ApplicationStatus, number> = {
         [ApplicationStatus.DRAFT]: 0,
         [ApplicationStatus.APPLIED]: 0,
+        [ApplicationStatus.SCREENING]: 0,
         [ApplicationStatus.INTERVIEWING]: 0,
         [ApplicationStatus.OFFER]: 0,
         [ApplicationStatus.REJECTED]: 0,

@@ -28,6 +28,8 @@ class SettingsResponse(BaseModel):
     default_master_resume_path: str = "master-resume_CV.yaml"
     autosave_enabled: bool = True
     tailor_mode: str = "agentic"
+    bg_animation_enabled: bool = True
+    bg_animation_type: str = "particles"
 
 
 class LLMTestRequest(BaseModel):
@@ -53,6 +55,8 @@ class SettingsUpdate(BaseModel):
     default_master_resume_path: Optional[str] = None
     autosave_enabled: Optional[bool] = None
     tailor_mode: Optional[str] = None
+    bg_animation_enabled: Optional[bool] = None
+    bg_animation_type: Optional[str] = None
     custom_prompt_resume_tailoring: Optional[str] = None
     custom_prompt_qa_generate: Optional[str] = None
     custom_prompt_qa_rewrite: Optional[str] = None

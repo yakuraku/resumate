@@ -27,8 +27,8 @@ type SortOption = "date_desc" | "date_asc" | "company_asc" | "company_desc" | "s
 
 const ALL_STATUSES = [
     ApplicationStatus.APPLIED,
+    ApplicationStatus.SCREENING,
     ApplicationStatus.INTERVIEWING,
-    ApplicationStatus.OFFER,
     ApplicationStatus.REJECTED,
     ApplicationStatus.GHOSTED,
     ApplicationStatus.DRAFT,
@@ -44,6 +44,7 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 const STATUS_DOT_COLORS: Record<ApplicationStatus, string> = {
     [ApplicationStatus.APPLIED]: "bg-blue-400",
+    [ApplicationStatus.SCREENING]: "bg-amber-400",
     [ApplicationStatus.INTERVIEWING]: "bg-violet-400",
     [ApplicationStatus.OFFER]: "bg-emerald-400",
     [ApplicationStatus.REJECTED]: "bg-red-400",
@@ -65,6 +66,8 @@ const getStatusColor = (status: ApplicationStatus) => {
     switch (status) {
         case ApplicationStatus.APPLIED:
             return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800";
+        case ApplicationStatus.SCREENING:
+            return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800";
         case ApplicationStatus.INTERVIEWING:
             return "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800";
         case ApplicationStatus.OFFER:
@@ -81,6 +84,7 @@ const getStatusColor = (status: ApplicationStatus) => {
 const getStatusDotColor = (status: ApplicationStatus) => {
     switch (status) {
         case ApplicationStatus.APPLIED: return "bg-blue-500";
+        case ApplicationStatus.SCREENING: return "bg-amber-500";
         case ApplicationStatus.INTERVIEWING: return "bg-purple-500";
         case ApplicationStatus.OFFER: return "bg-green-500";
         case ApplicationStatus.REJECTED: return "bg-red-500";

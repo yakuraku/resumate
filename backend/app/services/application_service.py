@@ -16,21 +16,33 @@ class ApplicationService:
 
     async def _auto_ghost_stale_applications(self) -> None:
         """
-        Automatically mark 'applied' applications as 'ghosted' if applied_date
-        is more than 30 days in the past.
+        Automatically mark stale active applications as 'ghosted' based on
+        how long they have been in each stage since applied_date:
+          - 'applied'     → ghosted after 21 days (no response after submitting)
+          - 'screening'   → ghosted after 30 days (screening went silent)
+          - 'interviewing'→ ghosted after 45 days (interview process went silent)
         """
-        cutoff = date.today() - timedelta(days=30)
-        stale_query = (
-            select(Application)
-            .where(Application.status == "applied")
-            .where(Application.applied_date != None)  # noqa: E711
-            .where(Application.applied_date <= cutoff)
-        )
-        stale_result = await self.db.execute(stale_query)
-        stale_apps = stale_result.scalars().all()
-        for app in stale_apps:
-            app.status = "ghosted"
-        if stale_apps:
+        thresholds = {
+            "applied": timedelta(days=21),
+            "screening": timedelta(days=30),
+            "interviewing": timedelta(days=45),
+        }
+        any_changed = False
+        for status, delta in thresholds.items():
+            cutoff = date.today() - delta
+            stale_query = (
+                select(Application)
+                .where(Application.status == status)
+                .where(Application.applied_date != None)  # noqa: E711
+                .where(Application.applied_date <= cutoff)
+            )
+            stale_result = await self.db.execute(stale_query)
+            stale_apps = stale_result.scalars().all()
+            for app in stale_apps:
+                app.status = "ghosted"
+            if stale_apps:
+                any_changed = True
+        if any_changed:
             await self.db.commit()
 
     async def get_all(
@@ -158,7 +170,7 @@ class ApplicationService:
         if not app:
             raise HTTPException(status_code=404, detail="Application not found")
 
-        valid_statuses = {"draft", "applied", "interviewing", "offer", "rejected", "ghosted"}
+        valid_statuses = {"draft", "applied", "screening", "interviewing", "offer", "rejected", "ghosted"}
         if status not in valid_statuses:
             raise HTTPException(
                 status_code=422,

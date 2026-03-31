@@ -16,6 +16,8 @@ DEFAULT_SETTINGS = {
     "default_master_resume_path": "master-resume_CV.yaml",
     "autosave_enabled": "true",
     "tailor_mode": "agentic",  # "agentic" | "standard"
+    "bg_animation_enabled": "true",
+    "bg_animation_type": "particles",  # "particles" | "galaxy"
 }
 
 # Default model per provider
@@ -55,6 +57,8 @@ class SettingsService:
             default_master_resume_path=raw.get("default_master_resume_path", DEFAULT_SETTINGS["default_master_resume_path"]),
             autosave_enabled=raw.get("autosave_enabled", "true").lower() == "true",
             tailor_mode=raw.get("tailor_mode", "agentic"),
+            bg_animation_enabled=raw.get("bg_animation_enabled", "true").lower() == "true",
+            bg_animation_type=raw.get("bg_animation_type", "particles"),
         )
 
     async def update_settings(self, db: AsyncSession, data: SettingsUpdate) -> SettingsResponse:
