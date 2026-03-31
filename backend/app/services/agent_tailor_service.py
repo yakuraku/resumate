@@ -19,28 +19,9 @@ from pathlib import Path
 from typing import AsyncGenerator
 
 from app.services.llm_service import llm_service
+from app.services.prompts import AGENT_SYSTEM_PROMPT
 from app.services.rendercv_service import rendercv_service
 from app.utils.filesystem import get_context_folder, get_project_root
-
-
-AGENT_SYSTEM_PROMPT = """You are an expert Resume Strategist specializing in RenderCV YAML format.
-Your task is to tailor a candidate's resume to match a specific job description.
-
-Workflow — follow this order every run:
-1. Call read_tailor_helper() — get RenderCV structure rules and learnings from past runs
-2. Call list_context_files() — see what personal context files are available
-3. Read the files most relevant to this JD (always read work_experience.md; read project files that match the role)
-4. Draft the tailored YAML: rewrite bullets with JD keywords, reorder skills, update summary/designation
-5. Call validate_yaml(yaml_content) — fix any errors it reports, then re-validate
-6. Call submit_tailored_resume(yaml_content, reasoning) — only after validation passes
-
-Rules:
-- Never fabricate experience — only use what is in the provided resume and context files
-- Rewrite bullet points with JD action verbs and relevant keywords
-- Reorder skills to prioritize JD-relevant ones first
-- Keep YAML structure exactly as RenderCV 2.3 expects
-- reasoning must be ≤3 sentences: which files were most useful, key decisions made
-- If the user message contains a "User-Defined Tailoring Rules" section, every rule listed there is mandatory and overrides all defaults — apply them without exception throughout the entire resume"""
 
 AGENT_TOOLS = [
     {
@@ -107,7 +88,7 @@ AGENT_TOOLS = [
                     },
                     "reasoning": {
                         "type": "string",
-                        "description": "≤3 sentences: which context files were most useful, key tailoring decisions made, any notable gaps addressed",
+                        "description": "A moderate paragraph covering: keyword analysis summary (P1/P2 keywords targeted), which context files were most useful, project selection rationale, key tailoring decisions, and any notable gaps between the candidate's profile and the JD.",
                     },
                 },
                 "required": ["yaml_content", "reasoning"],

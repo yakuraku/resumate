@@ -53,6 +53,7 @@ function relativeTime(dateStr: string): string {
 const STATUS_LABELS: Record<string, string> = {
     [ApplicationStatus.DRAFT]: "Draft",
     [ApplicationStatus.APPLIED]: "Applied",
+    [ApplicationStatus.SCREENING]: "Screening",
     [ApplicationStatus.INTERVIEWING]: "Interviewing",
     [ApplicationStatus.OFFER]: "Offer",
     [ApplicationStatus.REJECTED]: "Rejected",
@@ -62,6 +63,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_DOT: Record<string, string> = {
     [ApplicationStatus.DRAFT]: "bg-slate-400",
     [ApplicationStatus.APPLIED]: "bg-blue-400",
+    [ApplicationStatus.SCREENING]: "bg-amber-400",
     [ApplicationStatus.INTERVIEWING]: "bg-violet-400",
     [ApplicationStatus.OFFER]: "bg-emerald-400",
     [ApplicationStatus.REJECTED]: "bg-red-400",

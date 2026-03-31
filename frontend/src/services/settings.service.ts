@@ -11,6 +11,8 @@ export interface AppSettings {
   default_master_resume_path: string;
   autosave_enabled: boolean;
   tailor_mode?: string;
+  bg_animation_enabled: boolean;
+  bg_animation_type: string;
 }
 
 export interface SettingsUpdate {
@@ -24,6 +26,8 @@ export interface SettingsUpdate {
   default_master_resume_path?: string;
   autosave_enabled?: boolean;
   tailor_mode?: string;
+  bg_animation_enabled?: boolean;
+  bg_animation_type?: string;
 }
 
 export interface PromptInfo {

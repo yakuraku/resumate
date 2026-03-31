@@ -6,6 +6,7 @@ from enum import Enum
 class ApplicationStatus(str, Enum):
     DRAFT = "draft"
     APPLIED = "applied"
+    SCREENING = "screening"
     INTERVIEWING = "interviewing"
     OFFER = "offer"
     REJECTED = "rejected"
