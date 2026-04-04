@@ -67,6 +67,9 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [agentError, setAgentError] = useState(false);
     const [activeTab, setActiveTab] = useState("editor");
     const abortControllerRef = useRef<AbortController | null>(null);
+    // Stores the last persisted resume from the agentic SSE stream so onCheckResume
+    // can re-apply it reliably even if the SSE state updates raced with the click.
+    const lastTailoredResumeRef = useRef<Resume | null>(null);
     const [saving, setSaving] = useState(false);
 
     // JD Editing State
@@ -108,6 +111,8 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
     const [switchingTemplate, setSwitchingTemplate] = useState(false);
     const templateDropdownRef = useRef<HTMLDivElement>(null);
+    const [showTemplateSwitchConfirm, setShowTemplateSwitchConfirm] = useState(false);
+    const [pendingTemplateSwitch, setPendingTemplateSwitch] = useState<ResumeTemplate | null>(null);
 
     // Save as template (from tailor bar) state
     const [tailoredYaml, setTailoredYaml] = useState<string | null>(null);
@@ -540,6 +545,8 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                         } else if (event.type === "persisted") {
                             // Update resume state with the newly saved version
                             const updatedResume = (event as { type: "persisted"; resume: Resume }).resume;
+                            // Store in ref so onCheckResume can re-apply it reliably
+                            lastTailoredResumeRef.current = updatedResume;
                             setResume(updatedResume);
                             const newActive = updatedResume.versions?.find((v: ResumeVersion) => v.is_active);
                             if (newActive) {
@@ -673,7 +680,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         }
     };
 
-    const handleTemplateSwitch = async (template: ResumeTemplate) => {
+    const handleTemplateSwitch = (template: ResumeTemplate) => {
         setShowTemplateDropdown(false);
         if (!application) return;
 
@@ -683,14 +690,47 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
             return;
         }
 
+        // Show confirmation dialog — switching will auto-preserve current content first
+        setPendingTemplateSwitch(template);
+        setShowTemplateSwitchConfirm(true);
+    };
+
+    const handleTemplateSwitchConfirm = async () => {
+        if (!pendingTemplateSwitch || !application || !resume) return;
+        // Close dialog immediately; loading indicator shows on the toolbar button
+        setShowTemplateSwitchConfirm(false);
+        const template = pendingTemplateSwitch;
+        setPendingTemplateSwitch(null);
+
         setSwitchingTemplate(true);
         try {
-            const updated = await ApplicationService.updateResumeTemplate(application.id, template.id);
-            setApplication(updated);
-            setDisplayYaml(template.yaml_content);
-            setDebouncedValue(template.yaml_content);
+            // Step 1: Snapshot current content as a new inactive version so it is
+            // always recoverable from version history (preserves AI-tailored work etc.)
+            await ResumeService.saveAsNewVersion(
+                resume.id,
+                `Auto-saved before switching to "${template.name}"`
+            );
+
+            // Step 2: Overwrite the newly-active version's content with the template YAML.
+            // This also deletes the stale PDF so the next preview re-renders fresh.
+            const updatedResume = await ResumeService.updateYaml(resume.id, template.yaml_content);
+
+            // Step 3: Record the new template link on the application
+            const updatedApp = await ApplicationService.updateResumeTemplate(application.id, template.id);
+
+            // Sync frontend state
+            const newActive = updatedResume.versions?.find((v) => v.is_active);
+            setResume(updatedResume);
+            if (newActive) {
+                setViewingVersionId(newActive.id);
+                setDisplayYaml(newActive.yaml_content);
+                // Match debouncedValue to prevent the debounce timer from auto-saving stale content
+                setDebouncedValue(newActive.yaml_content);
+            }
+            setApplication(updatedApp);
+            setShowTailorBar(false);
             triggerPdfRefresh();
-            showToast(`Switched to "${template.name}"`);
+            showToast(`Switched to "${template.name}" — previous resume preserved in version history`);
         } catch (e) {
             console.error(e);
             showToast("Failed to switch template", "error");
@@ -1242,8 +1282,8 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                                                 ? "hover:bg-muted cursor-pointer text-muted-foreground hover:text-foreground"
                                                                 : "cursor-default text-muted-foreground"
                                                         )}
-                                                        aria-label="Switch resume template"
-                                                        title={application?.status !== ApplicationStatus.DRAFT ? "Template can only be switched for draft applications" : "Switch resume template"}
+                                                        aria-label="Switch base template"
+                                                        title={application?.status !== ApplicationStatus.DRAFT ? "Template can only be switched for draft applications" : "Switch base template — loads a saved template into the editor. Your current resume is preserved in version history."}
                                                     >
                                                         <BookOpen className="h-3 w-3 shrink-0" />
                                                         <span className="truncate font-medium">
@@ -1533,6 +1573,35 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                 </div>
             )}
 
+            {/* Template Switch Confirmation Dialog */}
+            {showTemplateSwitchConfirm && pendingTemplateSwitch && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">Switch Base Template?</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                This will load <span className="font-medium text-foreground">&quot;{pendingTemplateSwitch.name}&quot;</span> into the editor.
+                                Your current resume content will be automatically saved as a version first, so you can always restore it from version history.
+                            </p>
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setShowTemplateSwitchConfirm(false);
+                                    setPendingTemplateSwitch(null);
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button onClick={handleTemplateSwitchConfirm}>
+                                Switch Template
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Applied Confirmation Dialog */}
             {showAppliedConfirm && (
                 <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -1607,8 +1676,21 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                     setAgentModalOpen(false);
                 }}
                 onCheckResume={() => {
-                    setActiveTab("editor");
+                    // Re-apply persisted resume state from the ref to guarantee the editor
+                    // and version bar reflect the tailored result even if React batching
+                    // didn't fully commit the SSE state updates before the click.
+                    const stored = lastTailoredResumeRef.current;
+                    if (stored) {
+                        const newActive = stored.versions?.find((v) => v.is_active);
+                        setResume(stored);
+                        if (newActive) {
+                            setViewingVersionId(newActive.id);
+                            setDisplayYaml(newActive.yaml_content);
+                        }
+                        lastTailoredResumeRef.current = null;
+                    }
                     setAgentModalOpen(false);
+                    setActiveTab("editor");
                     triggerPdfRefresh();
                 }}
                 isComplete={agentComplete}
