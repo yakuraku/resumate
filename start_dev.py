@@ -63,7 +63,7 @@ def run_unified():
 
     processes = []
 
-    # 2. Run Alembic migrations
+    # 2. Run Alembic migrationsd
     venv_python = os.path.join(BACKEND_DIR, "venv", "Scripts", "python.exe")
     if not os.path.exists(venv_python):
         error(f"Backend venv not found at {venv_python}")
