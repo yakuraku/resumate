@@ -6,6 +6,25 @@ import os
 from pathlib import Path
 from app.utils.filesystem import get_project_root
 
+def _strip_rendercv_preamble(output: str) -> str:
+    """
+    RenderCV 2.3 always prints a version-notice + welcome-banner to stdout before
+    any step output or error table. The useful content starts at the first step
+    box, which contains "Validating the input file has started".
+
+    Strategy: find that marker and back up to the +---+ box border that wraps it.
+    If the marker is absent (unexpected output format), return the original string
+    so we still surface something rather than nothing.
+    """
+    marker = "Validating the input file has started"
+    idx = output.find(marker)
+    if idx == -1:
+        return output
+    # Walk back to the opening +---+ border of the step box
+    box_start = output.rfind("+---", 0, idx)
+    return output[box_start:] if box_start != -1 else output[idx:]
+
+
 class RenderCVService:
     def __init__(self):
         pass
@@ -121,12 +140,15 @@ class RenderCVService:
             )
             if process.returncode == 0:
                 return True, "OK"
-            # Extract the most useful part of the error
+            # RenderCV writes everything to stdout; stderr is typically empty.
+            # stdout starts with a version-notice + welcome-banner preamble (~1100 chars)
+            # before the actual error table. Strip that noise so the agent gets
+            # actionable information rather than "A new version is available!".
             stderr = (process.stderr or "").strip()
             stdout = (process.stdout or "").strip()
-            error_msg = stderr or stdout or f"RenderCV exited with code {process.returncode}"
-            # Trim to first 800 chars so it fits in the agent context
-            return False, error_msg[:800]
+            raw = stderr or stdout or f"RenderCV exited with code {process.returncode}"
+            raw = _strip_rendercv_preamble(raw)
+            return False, raw[:1500]
         except Exception as e:
             return False, f"Validation error: {str(e)}"
         finally:

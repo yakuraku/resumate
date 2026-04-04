@@ -98,6 +98,9 @@ AGENT_TOOLS = [
 ]
 
 MAX_ITERATIONS = 10
+# Stop the loop early if validation keeps failing so we don't burn API tokens.
+# Resets to 0 on any successful validation.
+MAX_CONSECUTIVE_VALIDATION_FAILURES = 3
 
 
 def _execute_tool(name: str, args: dict, context_dir: Path, helper_path: Path) -> str:
@@ -203,6 +206,9 @@ async def run_agentic_tailor(
     from datetime import date as _date
     today = _date.today().isoformat()
 
+    consecutive_validation_failures = 0
+    last_validation_error: str | None = None
+
     for iteration in range(MAX_ITERATIONS):
         try:
             result = await llm_service.get_completion_with_tools(
@@ -283,6 +289,34 @@ async def run_agentic_tailor(
             event = {"type": "tool_result", "tool": tool_name, "summary": summary}
             event.update(meta)
             yield event
+
+            # --- Validation guardrails ---
+            if tool_name == "validate_yaml":
+                if meta.get("ok"):
+                    consecutive_validation_failures = 0
+                    last_validation_error = None
+                else:
+                    # Detect identical repeated error — agent is not making progress
+                    if tool_result == last_validation_error:
+                        yield {
+                            "type": "error",
+                            "message": (
+                                f"Agent is repeating the same validation error without making progress. "
+                                f"Stopping to avoid wasting tokens.\n\nLast error:\n{tool_result[:600]}"
+                            ),
+                        }
+                        return
+                    last_validation_error = tool_result
+                    consecutive_validation_failures += 1
+                    if consecutive_validation_failures >= MAX_CONSECUTIVE_VALIDATION_FAILURES:
+                        yield {
+                            "type": "error",
+                            "message": (
+                                f"Validation failed {consecutive_validation_failures} times in a row. "
+                                f"Stopping to avoid burning API tokens.\n\nLast error:\n{tool_result[:600]}"
+                            ),
+                        }
+                        return
 
             # Append tool result to messages
             messages.append({

@@ -2,8 +2,11 @@ from datetime import datetime, timezone
 from email.utils import formatdate
 import hashlib
 import json as _json
+import re
+import shutil
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -396,3 +399,54 @@ async def get_resume_pdf(
             "Last-Modified": last_modified,
         }
     )
+
+
+class SaveToDiskRequest(BaseModel):
+    company_name: str  # Original name, used as folder name (e.g. "Shockbyte")
+    filename: str      # e.g. "shockbyte_senior_software_developer_resume.pdf"
+    force: bool = False  # If True, overwrite existing file without prompting
+
+
+JOB_APPLICATIONS_DIR = Path("D:/JOB APPLICATIONS")
+
+
+@router.post("/{resume_id}/save-to-disk")
+async def save_pdf_to_disk(
+    resume_id: str,
+    body: SaveToDiskRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Render (or use cached) PDF and save it to D:\\JOB APPLICATIONS\\{company}\\{filename}."""
+    resume = await resume_service.get_resume_by_id(db, resume_id)
+
+    output_dir = _resume_output_dir(resume_id)
+    output_path = output_dir / f"resume_{resume_id}.pdf"
+
+    if not output_path.exists():
+        success, msg = await rendercv_service.render_yaml_to_pdf(resume.yaml_content, output_path)
+        if not success:
+            raise HTTPException(status_code=422, detail=f"RenderCV failed: {msg[:500]}")
+
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="PDF not found after render")
+
+    # Sanitize company folder name — strip characters not valid in Windows paths
+    safe_company = re.sub(r'[<>:"/\\|?*]', "", body.company_name).strip() or "Unknown"
+    dest_dir = JOB_APPLICATIONS_DIR / safe_company
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Sanitize filename
+    safe_filename = re.sub(r'[<>:"/\\|?*]', "", body.filename).strip()
+    if not safe_filename.endswith(".pdf"):
+        safe_filename += ".pdf"
+
+    dest_path = dest_dir / safe_filename
+
+    if dest_path.exists() and not body.force:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "file_exists", "path": str(dest_path)},
+        )
+
+    shutil.copy2(str(output_path), str(dest_path))
+    return {"saved_to": str(dest_path)}

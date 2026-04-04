@@ -20,6 +20,7 @@ interface AgentProgressModalProps {
   onClose: () => void;
   onCheckResume: () => void;
   isComplete: boolean;
+  isPersisted: boolean;
   hasError: boolean;
 }
 
@@ -90,6 +91,16 @@ function TerminalLine({ event }: { event: AgentEvent }) {
     );
   }
 
+  if (event.type === "persisted") {
+    return (
+      <div className="flex gap-3 items-baseline">
+        <span className="text-emerald-500 text-xs">✓</span>
+        <span className="text-foreground text-xs font-semibold">Saved to database — PDF ready</span>
+        <span className="ml-auto text-xs font-bold text-emerald-500">READY</span>
+      </div>
+    );
+  }
+
   if (event.type === "error") {
     return (
       <div className="flex gap-3 items-baseline">
@@ -109,6 +120,7 @@ export function AgentProgressModal({
   onClose,
   onCheckResume,
   isComplete,
+  isPersisted,
   hasError,
 }: AgentProgressModalProps) {
   const logRef = useRef<HTMLDivElement>(null);
@@ -123,6 +135,8 @@ export function AgentProgressModal({
   if (!open) return null;
 
   const isRunning = !isComplete && !hasError;
+  // Agent has finished but DB save + PDF render is still in progress
+  const isPersisting = isComplete && !isPersisted && !hasError;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
@@ -156,19 +170,19 @@ export function AgentProgressModal({
             <div className="relative flex items-center justify-center w-28 h-28 z-10">
               <div className={cn(
                 "absolute w-28 h-28 rounded-full border border-primary/20",
-                isRunning && "animate-[spin_12s_linear_infinite]"
+                (isRunning || isPersisting) && "animate-[spin_12s_linear_infinite]"
               )} />
               <div className={cn(
                 "absolute w-20 h-20 rounded-full border-t-2 border-primary/50",
-                isRunning && "animate-[spin_8s_linear_infinite_reverse]"
+                (isRunning || isPersisting) && "animate-[spin_8s_linear_infinite_reverse]"
               )} />
               <div className={cn(
                 "w-10 h-10 rounded-full flex items-center justify-center",
-                isComplete ? "bg-emerald-500/10 border border-emerald-500/30" :
+                isComplete && isPersisted ? "bg-emerald-500/10 border border-emerald-500/30" :
                 hasError ? "bg-destructive/10 border border-destructive/30" :
                 "bg-primary/10 border border-primary/30"
               )}>
-                {isComplete ? (
+                {isComplete && isPersisted ? (
                   <svg className="h-4 w-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                   </svg>
@@ -187,11 +201,13 @@ export function AgentProgressModal({
             {/* Status text */}
             <div className="mt-6 text-center z-10 space-y-1">
               <p className="text-xs font-semibold text-foreground/80 uppercase tracking-widest">
-                {isComplete ? "Complete" : hasError ? "Failed" : "Processing"}
+                {isComplete && isPersisted ? "Complete" : isPersisting ? "Saving..." : hasError ? "Failed" : "Processing"}
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-[160px]">
-                {isComplete
+                {isComplete && isPersisted
                   ? "Your resume has been tailored and saved."
+                  : isPersisting
+                  ? "Rendering PDF and saving to database…"
                   : hasError
                   ? "An error occurred during tailoring."
                   : "Agent is reading your context and tailoring your resume."}
@@ -233,13 +249,20 @@ export function AgentProgressModal({
                   <span className="text-primary animate-pulse font-bold">▋</span>
                 </div>
               )}
+              {isPersisting && (
+                <div className="flex gap-3 items-baseline">
+                  <span className="text-primary/60 font-mono text-xs select-none">$</span>
+                  <span className="text-muted-foreground text-xs">Rendering PDF & saving to database…</span>
+                  <span className="ml-auto text-primary animate-pulse font-bold text-xs">▋</span>
+                </div>
+              )}
             </div>
 
             {/* Footer bar */}
             <div className="border-t border-white/5 px-4 py-2.5 flex items-center justify-between bg-black/30">
               <div className="flex items-center gap-2">
                 {/* Three vertical bars animation (like old Facebook loading) */}
-                {isRunning ? (
+                {isRunning || isPersisting ? (
                   <div className="flex items-end gap-0.5 h-3.5">
                     <div
                       className="w-0.5 bg-emerald-500 rounded-full"
@@ -254,7 +277,7 @@ export function AgentProgressModal({
                       style={{ height: "100%", animation: "fbBar 0.9s ease-in-out infinite", animationDelay: "0.4s" }}
                     />
                   </div>
-                ) : isComplete ? (
+                ) : isComplete && isPersisted ? (
                   <div className="flex items-end gap-0.5 h-3.5">
                     <div className="w-0.5 h-full bg-emerald-500 rounded-full" />
                     <div className="w-0.5 h-full bg-emerald-500 rounded-full" />
@@ -283,15 +306,15 @@ export function AgentProgressModal({
             onClick={onClose}
             className="text-muted-foreground hover:text-foreground text-xs"
           >
-            {isComplete || hasError ? "Close" : "Abort"}
+            {isRunning ? "Abort" : "Close"}
           </Button>
           <Button
             size="sm"
             onClick={onCheckResume}
-            disabled={!isComplete}
+            disabled={!isPersisted}
             className={cn(
               "text-xs gap-2 transition-all",
-              isComplete
+              isPersisted
                 ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
                 : "opacity-40 cursor-not-allowed"
             )}

@@ -25,8 +25,12 @@ The file `projects.md` is the **navigation index**. It contains brief summaries 
 
 ### Step 3: Read Relevant Sources
 - **Always read**: `projects.md` (index), `work_experience.md` (professional history)
-- **Then read 2-4 project files** most relevant to the JD, based on what you learned from the projects.md index
-- Do NOT read every file. Be selective — you have limited iterations.
+- **Then select project files** using this two-pass process:
+  1. Extract P1 keyword clusters from the JD (you haven't read the helper yet at this point — do a quick mental scan of the JD)
+  2. For each P1 cluster, check whether any project file's `Demonstrates:` tag in `projects.md` directly matches it. If yes, **that file is mandatory** — read it regardless of how many other files you've already chosen
+  3. After covering all P1 gaps, add 1-2 more files for P2 breadth if iteration budget allows
+- The `resume-tailor-helper.md` contains a **Keyword → Project File Routing** table — consult it when in doubt about which file covers a specific skill
+- Do NOT read every file. Be selective — but never skip a file that is the sole factual source for a P1 keyword in the JD.
 
 ### Step 4: Analyze the Job Description
 Before writing any YAML, perform keyword analysis:
@@ -88,6 +92,7 @@ Call `submit_tailored_resume(yaml_content, reasoning)` with:
 - Technologies or tools the candidate hasn't used
 - Certifications or credentials not mentioned in source files
 - Metrics that aren't based on real data from the context files
+- **Project details that belong to a different project**: Do not transplant a skill or technique from one project into another project's bullets because the JD asks for it. If you haven't read the file that actually covers that skill, read it first. Example: if the JD requires LoRA fine-tuning and you haven't read `teaching_smaller_models_how_to_think_summary.md`, do NOT add LoRA bullets to Plantopia — go read the correct file instead.
 
 ### You May Enhance
 - Reword bullets to incorporate JD keywords naturally while preserving factual accuracy
@@ -119,6 +124,29 @@ Follow these strictly to ensure valid, renderable YAML:
 
 ---
 
+## WRITING QUALITY
+
+Every word in this resume represents the candidate professionally. Apply these rules without exception:
+
+### Skill Details: Title Case
+All items in a comma-separated `details` string under a skills entry **must use Title Case** — capitalize the first letter of each major word. This applies to every term, phrase, and compound modifier in the list.
+
+- **Wrong**: `"code reviews, unit/integration testing, API design, documentation, Agile workflows"`
+- **Right**: `"Code Reviews, Unit/Integration Testing, API Design, Documentation, Agile Workflows"`
+
+Title case rules for multi-word phrases:
+- Capitalize: nouns, verbs, adjectives, adverbs, and the first word of the phrase
+- Lowercase: articles ("a", "an", "the"), coordinating conjunctions ("and", "or", "but"), and short prepositions ("of", "in", "on", "for", "with") when they appear in the middle of a phrase
+- Always capitalize: acronyms (API, CI/CD, REST), proper nouns (Python, Docker, Agile), and the first word of each comma-separated term regardless of part of speech
+
+### Bullet Points: Sentence Case
+Each highlight bullet begins with a capitalized strong action verb and reads as a complete, grammatically correct clause. Never start a bullet with a lowercase letter.
+
+### No Mixed Casing Within Lists
+Never mix cased and uncased terms in the same `details` string. If one term is Title Cased, all terms must be Title Cased. Inconsistency signals carelessness to a human reviewer.
+
+---
+
 ## COMMON MISTAKES TO AVOID
 
 - Renaming section keys (e.g., changing `skills` to `summary`)
@@ -129,3 +157,4 @@ Follow these strictly to ensure valid, renderable YAML:
 - Ignoring context files: the candidate's project files contain rich, specific details — use them
 - Generic bullets: "Developed software solutions" tells an interviewer nothing. Be specific.
 - Forgetting to validate before submitting
+- Inconsistent capitalization in skill details (see Writing Quality section above)

@@ -70,4 +70,14 @@ export const ResumeService = {
         });
         return new Blob([response.data], { type: 'application/pdf' });
     },
+
+    /** Save the current PDF directly to D:\JOB APPLICATIONS\{company}\ on disk. */
+    savePdfToDisk: async (resumeId: string, companyName: string, filename: string, force = false): Promise<string> => {
+        const response = await apiClient.post<{ saved_to: string }>(`/resumes/${resumeId}/save-to-disk`, {
+            company_name: companyName,
+            filename,
+            force,
+        });
+        return response.data.saved_to;
+    },
 };

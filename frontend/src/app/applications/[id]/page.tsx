@@ -63,6 +63,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
     const [agentModel, setAgentModel] = useState("");
     const [agentComplete, setAgentComplete] = useState(false);
+    const [agentPersisted, setAgentPersisted] = useState(false);
     const [agentError, setAgentError] = useState(false);
     const [activeTab, setActiveTab] = useState("editor");
     const abortControllerRef = useRef<AbortController | null>(null);
@@ -119,6 +120,11 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
     const [showSaveFrozenDialog, setShowSaveFrozenDialog] = useState(false);
     const [frozenSaveName, setFrozenSaveName] = useState("");
     const [savingFrozen, setSavingFrozen] = useState(false);
+
+    // Overwrite PDF confirmation state
+    const [showOverwriteDialog, setShowOverwriteDialog] = useState(false);
+    const [overwriteFilePath, setOverwriteFilePath] = useState("");
+    const [pendingOverwriteArgs, setPendingOverwriteArgs] = useState<{ company: string; filename: string } | null>(null);
 
     // Rename (role / company) state
     const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -390,24 +396,51 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                 const updated = await ResumeService.updateYaml(resume.id, displayYaml);
                 setResume(updated);
             }
-            const blob = await ResumeService.downloadPdfBlob(resume.id);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
             const company = (application.company || "company").replace(/[^a-z0-9]/gi, "_").toLowerCase();
             const role = (application.role || "resume").replace(/[^a-z0-9]/gi, "_").toLowerCase();
-            a.href = url;
-            a.download = `${company}_${role}_resume.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            triggerPdfRefresh();
-            showToast("Resume PDF downloaded");
+            const filename = `${company}_${role}_resume.pdf`;
+            const companyName = application.company || "Unknown";
+            try {
+                const savedTo = await ResumeService.savePdfToDisk(resume.id, companyName, filename, false);
+                triggerPdfRefresh();
+                showToast(`PDF saved to ${savedTo}`);
+            } catch (err: any) {
+                if (err?.response?.status === 409) {
+                    const path = err.response.data?.detail?.path || "";
+                    setOverwriteFilePath(path);
+                    setPendingOverwriteArgs({ company: companyName, filename });
+                    setShowOverwriteDialog(true);
+                    return;
+                }
+                throw err;
+            }
         } catch (e) {
-            console.error("Download failed", e);
-            showToast("Failed to download resume", "error");
+            console.error("Save PDF failed", e);
+            showToast("Failed to save resume PDF", "error");
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleOverwriteConfirm = async () => {
+        if (!resume || !pendingOverwriteArgs) return;
+        setShowOverwriteDialog(false);
+        setSaving(true);
+        try {
+            const savedTo = await ResumeService.savePdfToDisk(
+                resume.id,
+                pendingOverwriteArgs.company,
+                pendingOverwriteArgs.filename,
+                true,
+            );
+            triggerPdfRefresh();
+            showToast(`PDF saved to ${savedTo}`);
+        } catch (e) {
+            console.error("Save PDF failed", e);
+            showToast("Failed to save resume PDF", "error");
+        } finally {
+            setSaving(false);
+            setPendingOverwriteArgs(null);
         }
     };
 
@@ -452,6 +485,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         // Agentic SSE flow
         setAgentEvents([]);
         setAgentComplete(false);
+        setAgentPersisted(false);
         setAgentError(false);
         setAgentModel("");
         setAgentModalOpen(true);
@@ -513,6 +547,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                 setDisplayYaml(newActive.yaml_content);
                                 triggerPdfRefresh();
                             }
+                            setAgentPersisted(true);
                             setShowTailorBar(true);
                         } else if (event.type === "error") {
                             setAgentError(true);
@@ -1458,6 +1493,46 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                 </div>
             )}
 
+            {/* Overwrite PDF Dialog */}
+            {showOverwriteDialog && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                    <div className="bg-card border border-border rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">File Already Exists</h3>
+                            <p className="text-sm text-muted-foreground mt-1">
+                                A PDF already exists at this location. Do you want to overwrite it?
+                            </p>
+                            {overwriteFilePath && (
+                                <p className="text-xs font-mono text-muted-foreground mt-2 break-all bg-muted px-2 py-1.5 rounded-md">
+                                    {overwriteFilePath}
+                                </p>
+                            )}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                variant="ghost"
+                                onClick={() => {
+                                    setShowOverwriteDialog(false);
+                                    setPendingOverwriteArgs(null);
+                                }}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleOverwriteConfirm}
+                                style={application?.color ? {
+                                    backgroundColor: application.color,
+                                    color: getContrastColor(application.color),
+                                    borderColor: application.color,
+                                } : undefined}
+                            >
+                                Overwrite
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Applied Confirmation Dialog */}
             {showAppliedConfirm && (
                 <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
@@ -1534,8 +1609,10 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                 onCheckResume={() => {
                     setActiveTab("editor");
                     setAgentModalOpen(false);
+                    triggerPdfRefresh();
                 }}
                 isComplete={agentComplete}
+                isPersisted={agentPersisted}
                 hasError={agentError}
             />
         </CommandCenter>
