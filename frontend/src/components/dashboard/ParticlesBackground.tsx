@@ -91,6 +91,7 @@ export function ParticlesBackground() {
       aria-hidden="true"
     >
       <Particles
+        className="w-full h-full"
         particleCount={cfg.count}
         particleColors={cfg.colors}
         particleSpread={cfg.spread}

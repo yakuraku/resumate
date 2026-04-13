@@ -10,6 +10,7 @@ from app.api.v1 import (
     chat,
     credentials,
     resume_templates,
+    setup,
 )
 
 api_router = APIRouter()
@@ -23,3 +24,4 @@ api_router.include_router(questions.router, prefix="/questions", tags=["question
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(credentials.router, prefix="/credentials", tags=["credentials"])
+api_router.include_router(setup.router, prefix="/setup", tags=["setup"])

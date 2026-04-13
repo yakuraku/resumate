@@ -1,0 +1,68 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      # ── App identity ──────────────────────────────────────────────────────
+      APP_URL: "http://localhost:${FRONTEND_PORT:-1235}"
+      APP_ROOT: "/app"
+
+      # ── Database (absolute path so it is always in the mounted volume) ────
+      DATABASE_URL: "sqlite+aiosqlite:////app/data/resumate.db"
+
+      # ── LLM providers (copy from backend/.env or set here directly) ───────
+      # At least one key is required for AI features to work.
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-5-mini}"
+
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      DEFAULT_MODEL: "${DEFAULT_MODEL:-anthropic/claude-sonnet-4}"
+
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
+
+    volumes:
+      # Persistent user data -- survives container rebuilds.
+      # master-resume_CV.yaml is stored inside data/ and managed via the UI.
+      - ./data:/app/data
+      - ./my_info:/app/my_info
+
+    ports:
+      # Backend is NOT exposed to the host by default -- all traffic comes
+      # through the Next.js proxy inside the Docker network.
+      # Uncomment the line below only for local debugging / API access.
+      # - "${BACKEND_PORT:-8921}:8921"
+      []
+
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8921/api/v1/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        # Passed at build time so Next.js bakes the correct proxy destination
+        # into routes-manifest.json during `next build`.
+        BACKEND_URL: "http://backend:8921"
+    environment:
+      # Also set at runtime for any code that reads it outside of rewrites().
+      BACKEND_URL: "http://backend:8921"
+
+    ports:
+      # Change FRONTEND_PORT in your .env file if 1235 is taken.
+      - "${FRONTEND_PORT:-1235}:3000"
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    restart: unless-stopped

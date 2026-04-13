@@ -13,6 +13,13 @@ export interface AppSettings {
   tailor_mode?: string;
   bg_animation_enabled: boolean;
   bg_animation_type: string;
+  ghost_auto_enabled: boolean;
+  ghost_applied_days: number;
+  ghost_screening_days: number;
+  ghost_interviewing_days: number;
+  save_pdf_folder_enabled: boolean;
+  save_pdf_folder_path: string;
+  preferred_name: string;
 }
 
 export interface SettingsUpdate {
@@ -28,6 +35,13 @@ export interface SettingsUpdate {
   tailor_mode?: string;
   bg_animation_enabled?: boolean;
   bg_animation_type?: string;
+  ghost_auto_enabled?: boolean;
+  ghost_applied_days?: number;
+  ghost_screening_days?: number;
+  ghost_interviewing_days?: number;
+  save_pdf_folder_enabled?: boolean;
+  save_pdf_folder_path?: string;
+  preferred_name?: string;
 }
 
 export interface PromptInfo {

@@ -78,7 +78,7 @@ ResuMate/
     
     # AI Provider Keys
     OPENAI_API_KEY=your_openai_key_here
-    OPENAI_MODEL=gpt-4o-mini
+    OPENAI_MODEL=gpt-5-mini
     # OR
     OPENROUTER_API_KEY=your_openrouter_key_here
     DEFAULT_MODEL=anthropic/claude-sonnet-4

@@ -51,7 +51,7 @@ async def test_llm_connection(data: LLMTestRequest):
         base_url = "https://openrouter.ai/api/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
-            "HTTP-Referer": "http://localhost:3000",
+            "HTTP-Referer": app_settings.APP_URL,
             "X-Title": app_settings.PROJECT_NAME,
             "Content-Type": "application/json",
         }

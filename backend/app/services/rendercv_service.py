@@ -1,10 +1,10 @@
 import subprocess
 import shutil
+import tempfile
 import uuid
 import sys
 import os
 from pathlib import Path
-from app.utils.filesystem import get_project_root
 
 def _strip_rendercv_preamble(output: str) -> str:
     """
@@ -36,7 +36,7 @@ class RenderCVService:
         """
         run_id = str(uuid.uuid4())
         # Use a temp directory inside the project to avoid permission issues
-        temp_dir = get_project_root() / "temp" / f"render_{run_id}"
+        temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"render_{run_id}"
         temp_dir.mkdir(parents=True, exist_ok=True)
         
         yaml_file = temp_dir / "cv.yaml"
@@ -123,7 +123,7 @@ class RenderCVService:
         """
         import uuid, shutil, asyncio, subprocess, sys
         run_id = str(uuid.uuid4())
-        temp_dir = get_project_root() / "temp" / f"validate_{run_id}"
+        temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"validate_{run_id}"
         temp_dir.mkdir(parents=True, exist_ok=True)
         yaml_file = temp_dir / "cv.yaml"
         try:

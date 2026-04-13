@@ -21,7 +21,7 @@ from typing import AsyncGenerator
 from app.services.llm_service import llm_service
 from app.services.prompts import AGENT_SYSTEM_PROMPT
 from app.services.rendercv_service import rendercv_service
-from app.utils.filesystem import get_context_folder, get_project_root
+from app.utils.filesystem import get_context_folder, get_tailor_helper_path
 
 AGENT_TOOLS = [
     {
@@ -181,7 +181,7 @@ async def run_agentic_tailor(
     or {"type": "error", "message": ...}.
     """
     context_dir = get_context_folder()
-    helper_path = get_project_root() / "resume-tailor-helper.md"
+    helper_path = get_tailor_helper_path()
 
     # Build tailor rules section
     rules_text = ""

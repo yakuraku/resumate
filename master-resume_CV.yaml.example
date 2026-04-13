@@ -1,0 +1,109 @@
+# ResuMate -- Master Resume Example
+# ============================================================
+# Copy this file to master-resume_CV.yaml and fill in your details.
+# This file is loaded into ResuMate on first startup and becomes
+# your "Master Resume" -- the base from which all tailored versions
+# are generated.
+#
+# Format: RenderCV 2.3 YAML schema (https://docs.rendercv.com)
+# Renderer: Typst (no LaTeX required)
+# ============================================================
+
+cv:
+  # ── Personal details ────────────────────────────────────────
+  name: Alex Johnson
+  location: "San Francisco, CA"
+  email: alex.johnson@example.com
+  phone: "+1 415 555 0123"
+
+  # Social networks (supported: LinkedIn, GitHub, GitLab, etc.)
+  social_networks:
+    - network: LinkedIn
+      username: linkedin/alex-johnson
+    - network: GitHub
+      username: github.com/alexjohnson
+
+  # ── Sections ────────────────────────────────────────────────
+  # Section keys become headings on the PDF.
+  # Common types: string (plain text), ExperienceEntry, NormalEntry (projects), BulletEntry (skills)
+  sections:
+
+    # Skills -- use "label + details" format.
+    # Each label becomes a bold row; details is a comma-separated list.
+    skills:
+      - label: Languages
+        details: "Python, TypeScript, Go, SQL, Bash"
+      - label: Frameworks & Tools
+        details: "FastAPI, React, Next.js, Node.js, Docker, Kubernetes"
+      - label: Cloud & Infrastructure
+        details: "AWS (Lambda, S3, ECS), GCP, Terraform, CI/CD pipelines"
+      - label: Databases
+        details: "PostgreSQL, MySQL, Redis, MongoDB, DynamoDB"
+      - label: AI / ML
+        details: "PyTorch, scikit-learn, LangChain, vector databases, RAG systems"
+
+    # Experience -- always include your work history here.
+    # The AI agent uses this to write experience bullets tailored to each JD.
+    experience:
+      - company: Acme Corporation
+        position: Senior Software Engineer
+        location: "San Francisco, CA"
+        start_date: "2022-03"
+        end_date: "present"
+        highlights:
+          - "Led migration of monolithic payment service to microservices, reducing p99 latency by 40% across 2M+ daily transactions"
+          - "Architected real-time fraud detection pipeline using Kafka + Redis, cutting false positives by 35%"
+          - "Mentored 3 junior engineers and ran weekly code reviews across a team of 8"
+          - "Designed and shipped REST + GraphQL API serving 150+ enterprise clients"
+
+      - company: Beta Startup
+        position: Software Engineer
+        location: "New York, NY"
+        start_date: "2019-06"
+        end_date: "2022-02"
+        highlights:
+          - "Built the core ML inference engine (Python + FastAPI) serving 500K predictions/day with 99.9% uptime"
+          - "Reduced model serving costs by 60% by introducing quantisation and batched inference"
+          - "Owned the data ingestion pipeline (Airflow + dbt) processing 10TB/day from 20+ data sources"
+
+    # Projects -- these are the pool the agent swaps in and out depending on the JD.
+    # Include ALL your significant projects here; the agent picks the most relevant ones.
+    projects:
+      - name: OpenSearch Analytics Dashboard
+        date: "2023"
+        highlights:
+          - "Built a full-stack analytics dashboard (Next.js + FastAPI + PostgreSQL) deployed on AWS ECS"
+          - "Integrated OpenSearch for real-time log aggregation and anomaly detection across distributed services"
+        url: "https://github.com/alexjohnson/opensearch-dashboard"
+
+      - name: LLM-Powered Code Review Bot
+        date: "2023"
+        highlights:
+          - "Developed a GitHub Actions bot that uses GPT-4 to review PRs for security vulnerabilities and style issues"
+          - "Reduced review cycle time by 30% across a team of 12 engineers over 6 months"
+        url: "https://github.com/alexjohnson/llm-code-review"
+
+      - name: Distributed Task Queue
+        date: "2022"
+        highlights:
+          - "Implemented a Redis-backed distributed task queue in Go, supporting 10K concurrent workers"
+          - "Achieved 99.95% task completion rate with dead-letter queue and automatic retry logic"
+        url: "https://github.com/alexjohnson/dtq"
+
+    # Education
+    education:
+      - institution: University of California, Berkeley
+        area: Computer Science
+        degree: BS
+        start_date: "2015-08"
+        end_date: "2019-05"
+        highlights:
+          - "GPA: 3.8 / 4.0"
+          - "Relevant coursework: Algorithms, Distributed Systems, Machine Learning, Database Systems"
+
+# ── Design settings ─────────────────────────────────────────
+# Leave these as-is unless you want to customise the PDF layout.
+design:
+  theme: classic
+  page:
+    show_last_updated_date: false

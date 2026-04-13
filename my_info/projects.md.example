@@ -1,0 +1,37 @@
+# Projects Index
+
+<!-- ============================================================
+INSTRUCTIONS
+============================================================
+This file is the navigation index for your project context files.
+The AI agent reads this FIRST to decide which detailed project
+files to open -- so keep the summaries concise and accurate.
+
+Format for each project:
+
+## Project Name
+Brief 1-2 sentence description.
+**Demonstrates:** comma-separated list of skills/technologies
+**Relevant for:** roles or domains where this project is most useful
+**File:** filename.md (if you have a separate detailed file)
+
+The "Demonstrates:" tags are used by the agent's keyword-routing logic
+to decide whether to read a project's detail file for a given JD.
+
+Rename this file to projects.md when you are ready.
+============================================================ -->
+
+## OpenSearch Analytics Dashboard
+Full-stack web dashboard for real-time log analysis and anomaly detection, built with Next.js, FastAPI, and PostgreSQL, deployed on AWS ECS.
+**Demonstrates:** React, Next.js, FastAPI, PostgreSQL, AWS ECS, OpenSearch, Elasticsearch, full-stack development, data visualisation, anomaly detection
+**Relevant for:** full-stack engineer, backend engineer, data engineer, SRE roles
+
+## LLM-Powered Code Review Bot
+GitHub Actions bot using GPT-4 to automatically review pull requests for security vulnerabilities and code quality issues.
+**Demonstrates:** LLM integration, GPT-4, GitHub Actions, CI/CD, Python, developer tooling, prompt engineering, automation
+**Relevant for:** AI/ML engineer, developer tools, backend engineer, DevOps roles
+
+## Distributed Task Queue
+Redis-backed distributed task queue built in Go supporting 10K concurrent workers with dead-letter queue and retry logic.
+**Demonstrates:** Go, Redis, distributed systems, concurrency, message queuing, reliability engineering, systems programming
+**Relevant for:** backend engineer, platform engineer, systems engineer, SRE roles

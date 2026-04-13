@@ -11,18 +11,30 @@ DEFAULT_SETTINGS = {
     "llm_api_key_openai": "",
     "llm_api_key_openrouter": "",
     "llm_api_key_gemini": "",
-    "llm_model": "gpt-4o-mini",
+    "llm_model": "gpt-5-mini",
     "theme": "dark",
     "default_master_resume_path": "master-resume_CV.yaml",
     "autosave_enabled": "true",
     "tailor_mode": "agentic",  # "agentic" | "standard"
     "bg_animation_enabled": "true",
     "bg_animation_type": "particles",  # "particles" | "galaxy"
+    # Ghost detection
+    "ghost_auto_enabled": "true",
+    "ghost_applied_days": "21",
+    "ghost_screening_days": "21",
+    "ghost_interviewing_days": "60",
+    # PDF saving
+    "save_pdf_folder_enabled": "false",
+    "save_pdf_folder_path": "",
+    # Onboarding
+    "wizard_dismissed": "false",
+    # Profile
+    "preferred_name": "",
 }
 
 # Default model per provider
 PROVIDER_DEFAULT_MODELS = {
-    "openai": "gpt-4o-mini",
+    "openai": "gpt-5-mini",
     "openrouter": "anthropic/claude-sonnet-4",
     "gemini": "gemini-2.5-flash",
 }
@@ -59,6 +71,14 @@ class SettingsService:
             tailor_mode=raw.get("tailor_mode", "agentic"),
             bg_animation_enabled=raw.get("bg_animation_enabled", "true").lower() == "true",
             bg_animation_type=raw.get("bg_animation_type", "particles"),
+            ghost_auto_enabled=raw.get("ghost_auto_enabled", "true").lower() == "true",
+            ghost_applied_days=int(raw.get("ghost_applied_days", "21")),
+            ghost_screening_days=int(raw.get("ghost_screening_days", "21")),
+            ghost_interviewing_days=int(raw.get("ghost_interviewing_days", "60")),
+            save_pdf_folder_enabled=raw.get("save_pdf_folder_enabled", "false").lower() == "true",
+            save_pdf_folder_path=raw.get("save_pdf_folder_path", ""),
+            wizard_dismissed=raw.get("wizard_dismissed", "false").lower() == "true",
+            preferred_name=raw.get("preferred_name", ""),
         )
 
     async def update_settings(self, db: AsyncSession, data: SettingsUpdate) -> SettingsResponse:
@@ -93,6 +113,7 @@ class SettingsService:
     async def _refresh_llm_service(self, db: AsyncSession) -> None:
         """Refresh the global llm_service with updated settings."""
         from app.services.llm_service import llm_service
+        from app.config import settings as app_settings
         raw = await self._get_all_raw(db)
 
         provider = raw.get("llm_provider", "openai")
@@ -108,7 +129,6 @@ class SettingsService:
 
         if not api_key:
             # Fall back to .env values
-            from app.config import settings as app_settings
             if app_settings.OPENAI_API_KEY:
                 api_key = app_settings.OPENAI_API_KEY
                 provider = "openai"
@@ -126,14 +146,13 @@ class SettingsService:
                     model = app_settings.GEMINI_MODEL
 
         if not model:
-            model = PROVIDER_DEFAULT_MODELS.get(provider, "gpt-4o-mini")
+            model = PROVIDER_DEFAULT_MODELS.get(provider, "gpt-5-mini")
 
         if api_key:
             llm_service.api_key = api_key
             llm_service.provider = provider
             llm_service.default_model = model
 
-            from app.config import settings as app_settings
             if provider == "openai":
                 llm_service.base_url = "https://api.openai.com/v1/chat/completions"
                 llm_service.headers = {
@@ -150,7 +169,7 @@ class SettingsService:
                 llm_service.base_url = "https://openrouter.ai/api/v1/chat/completions"
                 llm_service.headers = {
                     "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": "http://localhost:3000",
+                    "HTTP-Referer": app_settings.APP_URL,
                     "X-Title": app_settings.PROJECT_NAME,
                     "Content-Type": "application/json",
                 }
@@ -188,7 +207,7 @@ class SettingsService:
                     model = app_settings.GEMINI_MODEL
 
         if not model:
-            model = PROVIDER_DEFAULT_MODELS.get(provider, "gpt-4o-mini")
+            model = PROVIDER_DEFAULT_MODELS.get(provider, "gpt-5-mini")
 
         return api_key, provider, model
 
