@@ -402,12 +402,9 @@ async def get_resume_pdf(
 
 
 class SaveToDiskRequest(BaseModel):
-    company_name: str  # Original name, used as folder name (e.g. "Shockbyte")
-    filename: str      # e.g. "shockbyte_senior_software_developer_resume.pdf"
-    force: bool = False  # If True, overwrite existing file without prompting
-
-
-JOB_APPLICATIONS_DIR = Path("D:/JOB APPLICATIONS")
+    company_name: str  # Original name, used as folder name (e.g. "Acme Corp")
+    filename: str      # e.g. "acme_corp_engineer_resume.pdf"
+    force: bool = False  # If True, overwrite existing file when folder-save is active
 
 
 @router.post("/{resume_id}/save-to-disk")
@@ -416,9 +413,22 @@ async def save_pdf_to_disk(
     body: SaveToDiskRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Render (or use cached) PDF and save it to D:\\JOB APPLICATIONS\\{company}\\{filename}."""
+    """Save or download the resume PDF.
+
+    Behavior depends on the user's "Save PDF to Folder" setting:
+    - Folder mode ON + path configured:
+        Saves the PDF to {folder}/{company}/{filename}.pdf on the server.
+        Returns JSON: {"mode": "folder", "saved_to": "<path>"}
+        Returns 409 if file already exists and force=False.
+    - Default (folder mode OFF or no path):
+        Streams the PDF as a browser download.
+        Returns application/pdf with Content-Disposition: attachment.
+    """
+    from app.services.settings_service import settings_service as svc
+
     resume = await resume_service.get_resume_by_id(db, resume_id)
 
+    # Render PDF if not already cached
     output_dir = _resume_output_dir(resume_id)
     output_path = output_dir / f"resume_{resume_id}.pdf"
 
@@ -430,23 +440,49 @@ async def save_pdf_to_disk(
     if not output_path.exists():
         raise HTTPException(status_code=404, detail="PDF not found after render")
 
-    # Sanitize company folder name — strip characters not valid in Windows paths
-    safe_company = re.sub(r'[<>:"/\\|?*]', "", body.company_name).strip() or "Unknown"
-    dest_dir = JOB_APPLICATIONS_DIR / safe_company
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    # Check folder-save settings
+    current = await svc.get_settings(db)
+    if current.save_pdf_folder_enabled and current.save_pdf_folder_path:
+        folder_root = Path(current.save_pdf_folder_path)
 
-    # Sanitize filename
+        if not folder_root.exists():
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Configured PDF save folder does not exist: {folder_root}. "
+                    "Update the path in Settings or create the folder."
+                ),
+            )
+
+        # Sanitize company folder name (strip path-unsafe characters)
+        safe_company = re.sub(r'[<>:"/\\|?*]', "", body.company_name).strip() or "Unknown"
+        dest_dir = folder_root / safe_company
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Sanitize filename
+        safe_filename = re.sub(r'[<>:"/\\|?*]', "", body.filename).strip()
+        if not safe_filename.endswith(".pdf"):
+            safe_filename += ".pdf"
+
+        dest_path = dest_dir / safe_filename
+
+        if dest_path.exists() and not body.force:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "file_exists", "path": str(dest_path)},
+            )
+
+        shutil.copy2(str(output_path), str(dest_path))
+        return {"mode": "folder", "saved_to": str(dest_path)}
+
+    # Default: stream PDF as a browser download
     safe_filename = re.sub(r'[<>:"/\\|?*]', "", body.filename).strip()
     if not safe_filename.endswith(".pdf"):
         safe_filename += ".pdf"
 
-    dest_path = dest_dir / safe_filename
-
-    if dest_path.exists() and not body.force:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "file_exists", "path": str(dest_path)},
-        )
-
-    shutil.copy2(str(output_path), str(dest_path))
-    return {"saved_to": str(dest_path)}
+    return FileResponse(
+        str(output_path),
+        media_type="application/pdf",
+        content_disposition_type="attachment",
+        filename=safe_filename,
+    )

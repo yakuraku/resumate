@@ -28,9 +28,17 @@ __pycache__/
 **/*.sqlite3
 
 # Generated / runtime data
-data/resumes/
+data/
 tailored_resumes/
 temp/
+
+# Personal resume data — NEVER commit these
+master-resume_CV.yaml
+my_info/*.md
+!my_info/*.md.example
+
+# Per-user tailor helper (generated from template on first run)
+resume-tailor-helper.md
 
 # Test / scratch artifacts
 test.pdf

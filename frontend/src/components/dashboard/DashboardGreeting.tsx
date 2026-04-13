@@ -69,9 +69,10 @@ function getSubMessage(weekCount: number, remaining: number, goalMet: boolean, w
 interface DashboardGreetingProps {
     applications: ApplicationResponse[];
     weeklyGoal?: number;
+    name?: string;
 }
 
-export function DashboardGreeting({ applications, weeklyGoal = 15 }: DashboardGreetingProps) {
+export function DashboardGreeting({ applications, weeklyGoal = 15, name }: DashboardGreetingProps) {
     const weekCount = useMemo(() => getThisWeekCount(applications), [applications]);
 
     const greeting = useMemo(() => {
@@ -118,10 +119,16 @@ export function DashboardGreeting({ applications, weeklyGoal = 15 }: DashboardGr
                         style={{ background: "var(--primary)" }}
                     />
                     <h1 className="relative text-2xl sm:text-3xl font-bold tracking-tight text-foreground leading-tight">
-                        {greeting},{" "}
-                        <span className="shiny-name" style={{ fontWeight: "inherit", fontSize: "inherit" }}>
-                            Yash
-                        </span>
+                        {name ? (
+                            <>
+                                {greeting},{" "}
+                                <span className="shiny-name" style={{ fontWeight: "inherit", fontSize: "inherit" }}>
+                                    {name}
+                                </span>
+                            </>
+                        ) : (
+                            <>{greeting}!</>
+                        )}
                         <span
                             className="text-muted-foreground/40"
                             style={{ WebkitTextFillColor: "unset" }}

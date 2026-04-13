@@ -3,11 +3,27 @@ import path from "path";
 
 const frontendNodeModules = path.resolve(__dirname, "node_modules");
 
+// Backend URL used by the Next.js server-side proxy.
+// In Docker Compose this is the internal service name (never exposed to browser).
+// For local dev without Docker, falls back to localhost:8921.
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://localhost:8921";
+
 const nextConfig: NextConfig = {
-  // Webpack config: CSS @import resolution goes through webpack's enhanced-resolve.
-  // Since the project root has no package.json, webpack can't walk up to find
-  // frontend/node_modules via normal module resolution. We use resolve.alias to
-  // explicitly map these CSS-imported packages to their installed locations.
+  // Proxy all /api/v1/* calls to the backend container.
+  // The browser only ever talks to the Next.js server (one origin, one port).
+  // This eliminates CORS issues and lets the frontend port be changed freely.
+  async rewrites() {
+    return [
+      {
+        source: "/api/v1/:path*",
+        destination: `${BACKEND_URL}/api/v1/:path*`,
+      },
+    ];
+  },
+
+  // Webpack: CSS @import resolution needs explicit module path because the
+  // project root has no package.json and webpack can't walk up to find
+  // frontend/node_modules automatically.
   webpack: (config) => {
     config.resolve.modules = [
       frontendNodeModules,
@@ -20,8 +36,8 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
-  // Turbopack config: needed to satisfy Next.js 16 which errors if only
-  // webpack config is present without a turbopack config.
+
+  // Turbopack config: required alongside webpack config in Next.js 16.
   turbopack: {
     resolveAlias: {
       tailwindcss: path.resolve(frontendNodeModules, "tailwindcss"),

@@ -48,7 +48,7 @@ class LLMService:
             self.default_model = settings.DEFAULT_MODEL
             self.headers = {
                 "Authorization": f"Bearer {self.api_key}",
-                "HTTP-Referer": "http://localhost:3000",
+                "HTTP-Referer": settings.APP_URL,
                 "X-Title": settings.PROJECT_NAME,
                 "Content-Type": "application/json"
             }

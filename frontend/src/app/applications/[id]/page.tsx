@@ -393,6 +393,17 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         }
     };
 
+    const _triggerBrowserDownload = (blob: Blob, filename: string) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
     const handleSave = async () => {
         if (!resume || !application) return;
         setSaving(true);
@@ -406,12 +417,20 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
             const filename = `${company}_${role}_resume.pdf`;
             const companyName = application.company || "Unknown";
             try {
-                const savedTo = await ResumeService.savePdfToDisk(resume.id, companyName, filename, false);
+                const result = await ResumeService.savePdf(resume.id, companyName, filename, false);
                 triggerPdfRefresh();
-                showToast(`PDF saved to ${savedTo}`);
+                if (result.mode === "folder") {
+                    showToast(`PDF saved to ${result.savedTo}`);
+                } else {
+                    _triggerBrowserDownload(result.blob, result.filename);
+                    showToast("PDF downloaded successfully");
+                }
             } catch (err: any) {
                 if (err?.response?.status === 409) {
-                    const path = err.response.data?.detail?.path || "";
+                    // Only possible in folder-save mode
+                    const blobText = await (err.response.data as Blob)?.text?.();
+                    let path = "";
+                    try { path = JSON.parse(blobText ?? "")?.detail?.path ?? ""; } catch { /* ignore */ }
                     setOverwriteFilePath(path);
                     setPendingOverwriteArgs({ company: companyName, filename });
                     setShowOverwriteDialog(true);
@@ -432,14 +451,19 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         setShowOverwriteDialog(false);
         setSaving(true);
         try {
-            const savedTo = await ResumeService.savePdfToDisk(
+            const result = await ResumeService.savePdf(
                 resume.id,
                 pendingOverwriteArgs.company,
                 pendingOverwriteArgs.filename,
                 true,
             );
             triggerPdfRefresh();
-            showToast(`PDF saved to ${savedTo}`);
+            if (result.mode === "folder") {
+                showToast(`PDF saved to ${result.savedTo}`);
+            } else {
+                _triggerBrowserDownload(result.blob, result.filename);
+                showToast("PDF downloaded successfully");
+            }
         } catch (e) {
             console.error("Save PDF failed", e);
             showToast("Failed to save resume PDF", "error");

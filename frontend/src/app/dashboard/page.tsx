@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User, Pencil, X, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { ApplicationService } from "@/services/application.service";
+import { SettingsService } from "@/services/settings.service";
 import { CreateApplicationModal } from "@/components/applications/CreateApplicationModal";
 import { DeleteApplicationModal } from "@/components/applications/DeleteApplicationModal";
 import { ApplicationResponse, ApplicationStatus } from "@/types/application";
@@ -98,6 +99,11 @@ export default function DashboardPage() {
     const [mounted, setMounted] = useState(false);
 
     const { applications, isLoading, refetch } = useDashboardData();
+    const [preferredName, setPreferredName] = useState("");
+
+    useEffect(() => {
+        SettingsService.get().then((s) => setPreferredName(s.preferred_name ?? "")).catch(() => {});
+    }, []);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [sortOpen, setSortOpen] = useState(false);
@@ -309,7 +315,7 @@ export default function DashboardPage() {
             <main className="relative z-10 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
                 {/* Row 1: Greeting */}
-                <DashboardGreeting applications={applications} />
+                <DashboardGreeting applications={applications} name={preferredName || undefined} />
 
                 {/* Row 2: Stats + Heatmap */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

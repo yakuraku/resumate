@@ -131,6 +131,9 @@ export default function SettingsPage() {
                     default_master_resume_path: data.default_master_resume_path,
                     autosave_enabled: data.autosave_enabled,
                     tailor_mode: data.tailor_mode || "agentic",
+                    save_pdf_folder_enabled: data.save_pdf_folder_enabled ?? false,
+                    save_pdf_folder_path: data.save_pdf_folder_path ?? "",
+                    preferred_name: data.preferred_name ?? "",
                 });
             } catch (e) {
                 showToast("Failed to load settings", "error");
@@ -335,6 +338,27 @@ export default function SettingsPage() {
 
                     {/* ─────────── GENERAL TAB ─────────── */}
                     <TabsContent value="general" className="space-y-0">
+                        {/* Profile */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Profile</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">How ResuMate addresses you on the dashboard.</p>
+                            </div>
+                            <div className="md:w-2/3 space-y-2">
+                                <Label htmlFor="preferred_name">Display Name</Label>
+                                <Input
+                                    id="preferred_name"
+                                    value={current.preferred_name ?? ""}
+                                    onChange={(e) => handleChange("preferred_name", e.target.value)}
+                                    placeholder="e.g. Alex"
+                                    className="max-w-xs"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Shown in the dashboard greeting. Leave blank to hide.
+                                </p>
+                            </div>
+                        </section>
+
                         {/* Appearance */}
                         <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
                             <div className="md:w-1/3">
@@ -575,7 +599,7 @@ export default function SettingsPage() {
                                         value={current.llm_model || ""}
                                         onChange={(e) => { handleChange("llm_model", e.target.value); setTestResult(null); }}
                                         placeholder={
-                                            current.llm_provider === "openai" ? "gpt-4o-mini" :
+                                            current.llm_provider === "openai" ? "gpt-5-mini" :
                                             current.llm_provider === "openrouter" ? "anthropic/claude-sonnet-4" :
                                             "gemini-2.5-flash"
                                         }
@@ -770,6 +794,55 @@ export default function SettingsPage() {
 
                     {/* ─────────── DATA TAB ─────────── */}
                     <TabsContent value="data" className="space-y-0">
+                        {/* PDF Downloads */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">PDF Downloads</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    By default the Save PDF button downloads the file directly in your browser.
+                                    Enable folder saving to have PDFs organised by company on the server.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-5">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Save to folder</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            When enabled, PDFs are saved to the path below instead of being downloaded.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={!!(current as AppSettings).save_pdf_folder_enabled}
+                                        onCheckedChange={(v) => handleChange("save_pdf_folder_enabled", v)}
+                                    />
+                                </div>
+
+                                {(current as AppSettings).save_pdf_folder_enabled && (
+                                    <div className="space-y-2">
+                                        <Label htmlFor="pdf-folder-path">Save folder path</Label>
+                                        <Input
+                                            id="pdf-folder-path"
+                                            placeholder="/home/user/job-applications"
+                                            value={(current as AppSettings).save_pdf_folder_path ?? ""}
+                                            onChange={(e) => handleChange("save_pdf_folder_path", e.target.value)}
+                                        />
+                                        <p className="text-xs text-muted-foreground">
+                                            A subfolder named after the company will be created inside this path for each resume.
+                                        </p>
+                                        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-600 dark:text-amber-400">
+                                            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                                            <span>
+                                                <strong>Docker users:</strong> this path must be inside a volume-mounted directory.
+                                                Mount a host folder in <code className="font-mono">docker-compose.yml</code> and
+                                                enter the container-side path here (e.g. <code className="font-mono">/downloads</code>).
+                                                See QUICKSTART.md for details.
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+
                         {/* Export */}
                         <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
                             <div className="md:w-1/3">

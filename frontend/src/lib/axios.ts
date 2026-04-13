@@ -1,31 +1,26 @@
 import axios from 'axios';
 
-// Create axios instance with default config
+// In Docker the Next.js server proxies /api/v1/* to the backend container
+// (see next.config.ts rewrites). The browser calls the relative path so no
+// cross-origin request is made and no CORS configuration is required.
+// For local dev without Docker, set NEXT_PUBLIC_API_URL to override.
+const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8921/api/v1',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add a request interceptor
 apiClient.interceptors.request.use(
-  (config) => {
-    // You can add auth tokens here if needed in the future
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (config) => config,
+  (error) => Promise.reject(error)
 );
 
-// Add a response interceptor
 apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    // Handle errors globally (e.g., logging, toast notifications)
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }

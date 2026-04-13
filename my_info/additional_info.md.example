@@ -1,0 +1,34 @@
+# Additional Information
+
+<!-- ============================================================
+INSTRUCTIONS
+============================================================
+Use this file for anything that doesn't fit neatly into work
+experience or projects -- certifications, open source contributions,
+publications, awards, languages, volunteer work, etc.
+
+The AI agent reads this when the JD signals it may be relevant
+(e.g., a JD mentioning AWS certifications, open source, teaching).
+
+Rename this file to additional_info.md when you are ready.
+============================================================ -->
+
+## Certifications
+- AWS Certified Solutions Architect -- Associate (2023)
+- Google Cloud Professional Data Engineer (2022)
+
+## Open Source Contributions
+- Contributor to FastAPI (10+ merged PRs, focused on async performance and documentation)
+- Maintainer of a popular pytest plugin (800+ GitHub stars) for async test fixtures
+
+## Speaking / Writing
+- "Building Production-Ready LLM Applications" -- PyCon 2024 lightning talk
+- Technical blog at alexjohnson.dev -- 3 posts with 10K+ combined views on LLM fine-tuning
+
+## Education Extras
+- Teaching Assistant for CS 189 (Machine Learning), UC Berkeley, 2018-2019
+- Dean's List all 4 years
+
+## Languages
+- English (native)
+- Spanish (conversational)
