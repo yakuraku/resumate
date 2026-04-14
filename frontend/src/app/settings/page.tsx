@@ -134,6 +134,10 @@ export default function SettingsPage() {
                     save_pdf_folder_enabled: data.save_pdf_folder_enabled ?? false,
                     save_pdf_folder_path: data.save_pdf_folder_path ?? "",
                     preferred_name: data.preferred_name ?? "",
+                    ghost_auto_enabled: data.ghost_auto_enabled,
+                    ghost_applied_days: data.ghost_applied_days,
+                    ghost_screening_days: data.ghost_screening_days,
+                    ghost_interviewing_days: data.ghost_interviewing_days,
                 });
             } catch (e) {
                 showToast("Failed to load settings", "error");
@@ -222,7 +226,7 @@ export default function SettingsPage() {
         return "llm_api_key_openai";
     };
 
-    const handleChange = (key: keyof SettingsUpdate, value: string | boolean) => {
+    const handleChange = (key: keyof SettingsUpdate, value: string | boolean | number) => {
         setForm((prev) => {
             const next = { ...prev, [key]: value };
             // When provider switches, load that provider's stored key into llm_api_key
@@ -456,7 +460,7 @@ export default function SettingsPage() {
                         </section>
 
                         {/* Resume Defaults */}
-                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10">
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
                             <div className="md:w-1/3">
                                 <h3 className="text-base font-semibold">Resume Defaults</h3>
                                 <p className="mt-1 text-sm text-muted-foreground">Configure default file paths and templates.</p>
@@ -473,6 +477,68 @@ export default function SettingsPage() {
                                 <p className="text-xs text-muted-foreground">
                                     Path relative to the project root. New applications will clone from this file.
                                 </p>
+                            </div>
+                        </section>
+
+                        {/* Application Pipeline — Ghost Detection */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Application Pipeline</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Configure when applications are automatically marked as ghosted. Timers start from the last status change, not the application date.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-5">
+                                {/* Master toggle */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Auto-ghost Stale Applications</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            Automatically mark applications as ghosted when they go silent for too long.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={current.ghost_auto_enabled ?? true}
+                                        onCheckedChange={(checked) => handleChange("ghost_auto_enabled", checked)}
+                                    />
+                                </div>
+
+                                {/* Threshold inputs — only visible when auto-ghost is on */}
+                                {(current.ghost_auto_enabled ?? true) && (
+                                    <div className="space-y-4 pl-0 pt-1">
+                                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Days before ghosting per stage</p>
+                                        {([
+                                            { key: "ghost_applied_days" as const, label: "Applied", hint: "Days since moving to Applied with no response." },
+                                            { key: "ghost_screening_days" as const, label: "Screening", hint: "Days since entering Screening with no update." },
+                                            { key: "ghost_interviewing_days" as const, label: "Interviewing", hint: "Days since entering Interviewing with no update." },
+                                        ]).map(({ key, label, hint }) => (
+                                            <div key={key} className="flex items-start gap-4">
+                                                <div className="flex-1">
+                                                    <Label htmlFor={key} className="text-sm">{label}</Label>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <Input
+                                                        id={key}
+                                                        type="number"
+                                                        min={1}
+                                                        max={365}
+                                                        value={current[key] ?? (key === "ghost_interviewing_days" ? 60 : 21)}
+                                                        onChange={(e) => {
+                                                            const v = parseInt(e.target.value, 10);
+                                                            if (!isNaN(v) && v >= 1) handleChange(key, v);
+                                                        }}
+                                                        className="w-20 text-center font-mono"
+                                                    />
+                                                    <span className="text-sm text-muted-foreground">days</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <p className="text-xs text-muted-foreground pt-1">
+                                            Individual applications can opt out of auto-ghosting from their Job Context tab.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </section>
                     </TabsContent>

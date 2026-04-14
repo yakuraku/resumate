@@ -7,7 +7,7 @@ from app.models.resume_template import ResumeTemplate
 from app.schemas.application import ApplicationCreate, ApplicationUpdate
 from typing import Optional, List, Tuple
 from fastapi import HTTPException
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import uuid
 
 class ApplicationService:
@@ -16,32 +16,69 @@ class ApplicationService:
 
     async def _auto_ghost_stale_applications(self) -> None:
         """
-        Automatically mark stale active applications as 'ghosted' based on
-        how long they have been in each stage since applied_date:
-          - 'applied'     → ghosted after 21 days (no response after submitting)
-          - 'screening'   → ghosted after 30 days (screening went silent)
-          - 'interviewing'→ ghosted after 45 days (interview process went silent)
+        Automatically mark stale applications as 'ghosted'.
+
+        Timer baseline per app (fallback chain):
+          1. status_changed_at  — set on every manual or auto status transition
+          2. applied_date       — legacy fallback for apps created before status_changed_at existed
+          3. created_at         — final fallback so no app is ever immune (even without applied_date)
+
+        Thresholds (configurable in Settings → General → Application Pipeline):
+          - 'applied'      → ghost_applied_days (default 21)
+          - 'screening'    → ghost_screening_days (default 21)
+          - 'interviewing' → ghost_interviewing_days (default 60)
+
+        Apps with ghost_disabled=True are skipped.
+        Draft, offer, rejected, and ghosted apps are never touched.
         """
+        from app.services.settings_service import settings_service
+
+        raw = await settings_service._get_all_raw(self.db)
+
+        if raw.get("ghost_auto_enabled", "true").lower() != "true":
+            return
+
+        applied_days = int(raw.get("ghost_applied_days", "21"))
+        screening_days = int(raw.get("ghost_screening_days", "21"))
+        interviewing_days = int(raw.get("ghost_interviewing_days", "60"))
+
         thresholds = {
-            "applied": timedelta(days=21),
-            "screening": timedelta(days=30),
-            "interviewing": timedelta(days=45),
+            "applied": timedelta(days=applied_days),
+            "screening": timedelta(days=screening_days),
+            "interviewing": timedelta(days=interviewing_days),
         }
+
+        today = date.today()
+        now = datetime.now(timezone.utc)
         any_changed = False
+
         for status, delta in thresholds.items():
-            cutoff = date.today() - delta
-            stale_query = (
+            cutoff = today - delta
+
+            # Fetch all non-opted-out apps in this status; Python-side date comparison
+            # is fine here since volumes are small and avoids SQLite date-cast complexity.
+            candidates_result = await self.db.execute(
                 select(Application)
                 .where(Application.status == status)
-                .where(Application.applied_date != None)  # noqa: E711
-                .where(Application.applied_date <= cutoff)
+                .where(Application.ghost_disabled == False)  # noqa: E712
             )
-            stale_result = await self.db.execute(stale_query)
-            stale_apps = stale_result.scalars().all()
-            for app in stale_apps:
-                app.status = "ghosted"
-            if stale_apps:
-                any_changed = True
+            candidates = candidates_result.scalars().all()
+
+            for app in candidates:
+                # Determine effective baseline date (fallback chain)
+                if app.status_changed_at is not None:
+                    effective_date = app.status_changed_at.date()
+                elif app.applied_date is not None:
+                    effective_date = app.applied_date
+                else:
+                    effective_date = app.created_at.date()
+
+                if effective_date <= cutoff:
+                    app.status = "ghosted"
+                    app.ghosted_at = now
+                    app.status_changed_at = now
+                    any_changed = True
+
         if any_changed:
             await self.db.commit()
 
@@ -71,6 +108,7 @@ class ApplicationService:
 
     async def create(self, data: ApplicationCreate) -> Application:
         app = Application(**data.model_dump())
+        app.status_changed_at = datetime.now(timezone.utc)
         self.db.add(app)
         await self.db.commit()
         await self.db.refresh(app)
@@ -189,6 +227,10 @@ class ApplicationService:
                     app.resume_snapshot_yaml = template.yaml_content
 
         app.status = status
+        app.status_changed_at = datetime.now(timezone.utc)
+        # Record ghosted_at whenever an app is explicitly moved to ghosted (manual or auto).
+        if status == "ghosted":
+            app.ghosted_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(app)
         return app
