@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
     ArrowLeft, ExternalLink, Briefcase, FileText, Download, BrainCircuit,
     Loader2, MessageSquare, AlertTriangle, RefreshCw,
@@ -267,6 +269,19 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         }
         doStatusUpdate(newStatus);
     };
+
+    const handleGhostDisabledToggle = useCallback(async (disabled: boolean) => {
+        if (!application) return;
+        // Optimistic update
+        setApplication((prev) => prev ? { ...prev, ghost_disabled: disabled } : prev);
+        try {
+            await ApplicationService.update(application.id, { ghost_disabled: disabled });
+        } catch (e) {
+            // Revert on failure
+            setApplication((prev) => prev ? { ...prev, ghost_disabled: !disabled } : prev);
+            showToast("Failed to update ghost setting", "error");
+        }
+    }, [application, showToast]);
 
     // ── JD Autosave ────────────────────────────────────────────────────────────
     const saveJdSilently = useCallback(
@@ -1162,9 +1177,32 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                                                 </CardContent>
                                             </Card>
                                         </div>
-                                        {/* Right column - Credentials */}
-                                        <div className="w-full lg:w-[38%]">
+                                        {/* Right column - Credentials + Application Settings */}
+                                        <div className="w-full lg:w-[38%] space-y-4">
                                             <CredentialCard applicationId={application.id} />
+                                            {/* Ghost detection opt-out */}
+                                            <Card>
+                                                <CardHeader className="pb-3">
+                                                    <CardTitle className="text-sm font-medium">Application Settings</CardTitle>
+                                                </CardHeader>
+                                                <CardContent>
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div>
+                                                            <Label htmlFor="ghost-disabled-toggle" className="text-sm font-medium cursor-pointer">
+                                                                Disable Auto-ghost
+                                                            </Label>
+                                                            <p className="text-xs text-muted-foreground mt-0.5">
+                                                                Prevent this application from being automatically marked as ghosted, even if it goes silent.
+                                                            </p>
+                                                        </div>
+                                                        <Switch
+                                                            id="ghost-disabled-toggle"
+                                                            checked={application.ghost_disabled}
+                                                            onCheckedChange={handleGhostDisabledToggle}
+                                                        />
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
                                         </div>
                                     </div>
                                 </div>

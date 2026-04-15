@@ -36,6 +36,7 @@ class ApplicationUpdate(BaseModel):
     notes: Optional[str] = None
     applied_date: Optional[date] = None
     color: Optional[str] = None
+    ghost_disabled: Optional[bool] = None
 
 class ColorUpdate(BaseModel):
     color: Optional[str] = None
@@ -46,6 +47,9 @@ class ApplicationResponse(ApplicationBase):
     updated_at: datetime
     resume_template_id: Optional[str] = None
     resume_snapshot_yaml: Optional[str] = None
+    status_changed_at: Optional[datetime] = None
+    ghosted_at: Optional[datetime] = None
+    ghost_disabled: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

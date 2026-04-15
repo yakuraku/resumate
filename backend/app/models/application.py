@@ -1,7 +1,7 @@
 from enum import Enum
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text, Date, ForeignKey
+from sqlalchemy import String, Text, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import BaseModel
 
@@ -33,6 +33,9 @@ class Application(BaseModel):
     source_url: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
     applied_date: Mapped[date | None] = mapped_column(Date)
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ghosted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ghost_disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     resume_template_id: Mapped[str | None] = mapped_column(
         ForeignKey("resume_templates.id", ondelete="SET NULL"), nullable=True
     )

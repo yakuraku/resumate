@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useBackgroundAnimation } from "@/hooks/useBackgroundAnimation";
 import { CommandCenter } from "@/components/layout/CommandCenter";
-import { useTheme } from "@/components/theme-provider";
+import { useTheme, type Theme } from "@/components/theme-provider";
 import { SettingsService, AppSettings, SettingsUpdate, PromptsData } from "@/services/settings.service";
 import { ApplicationService } from "@/services/application.service";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
     Loader2, Eye, EyeOff, AlertTriangle, Save, Download,
-    CheckCircle, Plus, Trash2, RotateCcw, X, ChevronRight,
+    CheckCircle, Check, Plus, Trash2, RotateCcw, X, ChevronRight,
     FileEdit, MessageSquarePlus, Sparkles, BookMarked, Zap, ExternalLink
 } from "lucide-react";
 import {
@@ -62,6 +62,22 @@ const PROMPT_LABELS: Record<string, { title: string; description: string; icon: 
 };
 
 const PROMPT_KEYS = ["resume_tailoring", "qa_generate", "qa_rewrite", "qa_saved"];
+
+const SETTINGS_THEMES: Array<{
+    id: Theme;
+    name: string;
+    description: string;
+    preview: { bg: string; card: string; primary: string; border: string } | null;
+}> = [
+    { id: "light",    name: "Light",    description: "Clean & crisp",   preview: { bg: "#fafafa", card: "#ffffff", primary: "#0d9488", border: "#e4e4e7" } },
+    { id: "dark",     name: "Dark",     description: "Deep black",       preview: { bg: "#09090b", card: "#0f0f0f", primary: "#2dd4bf", border: "#27272a" } },
+    { id: "pastel",   name: "Pastel",   description: "Soft lavender",    preview: { bg: "#f5f3ff", card: "#ffffff", primary: "#7c3aed", border: "#ddd6fe" } },
+    { id: "neutral",  name: "Neutral",  description: "Warm stone",       preview: { bg: "#f7f5f0", card: "#faf9f6", primary: "#b45309", border: "#d4cfc0" } },
+    { id: "midnight", name: "Midnight", description: "Deep navy",        preview: { bg: "#020817", card: "#0a1128", primary: "#60a5fa", border: "#1e2d4d" } },
+    { id: "system",   name: "System",   description: "Follows your OS",  preview: null },
+];
+
+const GALAXY_INCOMPATIBLE_THEMES: Theme[] = ["light", "pastel", "neutral"];
 
 export default function SettingsPage() {
     const { theme, setTheme } = useTheme();
@@ -134,6 +150,10 @@ export default function SettingsPage() {
                     save_pdf_folder_enabled: data.save_pdf_folder_enabled ?? false,
                     save_pdf_folder_path: data.save_pdf_folder_path ?? "",
                     preferred_name: data.preferred_name ?? "",
+                    ghost_auto_enabled: data.ghost_auto_enabled,
+                    ghost_applied_days: data.ghost_applied_days,
+                    ghost_screening_days: data.ghost_screening_days,
+                    ghost_interviewing_days: data.ghost_interviewing_days,
                 });
             } catch (e) {
                 showToast("Failed to load settings", "error");
@@ -222,7 +242,7 @@ export default function SettingsPage() {
         return "llm_api_key_openai";
     };
 
-    const handleChange = (key: keyof SettingsUpdate, value: string | boolean) => {
+    const handleChange = (key: keyof SettingsUpdate, value: string | boolean | number) => {
         setForm((prev) => {
             const next = { ...prev, [key]: value };
             // When provider switches, load that provider's stored key into llm_api_key
@@ -239,7 +259,11 @@ export default function SettingsPage() {
         });
         setDirty(true);
         if (key === "theme") {
-            setTheme(value as "light" | "dark" | "system");
+            const newTheme = value as Theme;
+            setTheme(newTheme);
+            if (GALAXY_INCOMPATIBLE_THEMES.includes(newTheme) && animationType === "galaxy") {
+                setAnimationType("particles");
+            }
         }
     };
 
@@ -368,18 +392,46 @@ export default function SettingsPage() {
                             <div className="md:w-2/3 space-y-4">
                                 <div className="space-y-2">
                                     <Label>Theme</Label>
-                                    <div className="flex gap-2">
-                                        {(["light", "dark", "system"] as const).map((t) => (
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {SETTINGS_THEMES.map((t) => (
                                             <button
-                                                key={t}
-                                                onClick={() => handleChange("theme", t)}
-                                                className={`flex-1 py-2 px-3 rounded-md border text-sm font-medium capitalize transition-colors ${
-                                                    current.theme === t
-                                                        ? "border-primary bg-primary/10 text-primary"
-                                                        : "border-border text-muted-foreground hover:border-primary/50"
+                                                key={t.id}
+                                                onClick={() => handleChange("theme", t.id)}
+                                                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-left transition-colors ${
+                                                    current.theme === t.id
+                                                        ? "border-primary bg-primary/10"
+                                                        : "border-border hover:border-primary/50 hover:bg-muted/50"
                                                 }`}
                                             >
-                                                {t}
+                                                {t.preview ? (
+                                                    <div
+                                                        className="flex-shrink-0 w-7 h-7 rounded-md border border-border/60 overflow-hidden shadow-sm"
+                                                        style={{ background: t.preview.bg }}
+                                                    >
+                                                        <div className="w-full h-full grid grid-cols-2 grid-rows-2">
+                                                            <div style={{ background: t.preview.card }} />
+                                                            <div style={{ background: t.preview.primary }} />
+                                                            <div style={{ background: t.preview.border }} />
+                                                            <div style={{ background: t.preview.bg }} />
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex-shrink-0 w-7 h-7 rounded-md border border-border/60 overflow-hidden shadow-sm">
+                                                        <div className="w-full h-full grid grid-cols-2">
+                                                            <div style={{ background: "#fafafa" }} />
+                                                            <div style={{ background: "#09090b" }} />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className={`text-sm font-medium leading-none ${current.theme === t.id ? "text-primary" : "text-foreground"}`}>
+                                                        {t.name}
+                                                    </p>
+                                                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{t.description}</p>
+                                                </div>
+                                                {current.theme === t.id && (
+                                                    <Check size={12} className="text-primary flex-shrink-0" />
+                                                )}
                                             </button>
                                         ))}
                                     </div>
@@ -413,25 +465,37 @@ export default function SettingsPage() {
                                     <div className="space-y-2">
                                         <p className="text-sm font-medium">Animation Style</p>
                                         <div className="flex gap-2 p-1 rounded-lg bg-muted/60 border border-border w-fit">
-                                            {(["particles", "galaxy"] as const).map((type) => (
-                                                <button
-                                                    key={type}
-                                                    onClick={() => setAnimationType(type)}
-                                                    className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
-                                                        animationType === type
-                                                            ? "bg-card text-foreground shadow-sm border border-border"
-                                                            : "text-muted-foreground hover:text-foreground"
-                                                    }`}
-                                                >
-                                                    {type === "particles" ? "✦ Particles" : "✺ Galaxy"}
-                                                </button>
-                                            ))}
+                                            {(["particles", "galaxy"] as const).map((type) => {
+                                                const galaxyDisabled = type === "galaxy" && GALAXY_INCOMPATIBLE_THEMES.includes(theme);
+                                                return (
+                                                    <button
+                                                        key={type}
+                                                        onClick={() => !galaxyDisabled && setAnimationType(type)}
+                                                        disabled={galaxyDisabled}
+                                                        title={galaxyDisabled ? "Galaxy is not available with light-mode themes" : undefined}
+                                                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all capitalize ${
+                                                            galaxyDisabled
+                                                                ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                                                                : animationType === type
+                                                                    ? "bg-card text-foreground shadow-sm border border-border"
+                                                                    : "text-muted-foreground hover:text-foreground"
+                                                        }`}
+                                                    >
+                                                        {type === "particles" ? "✦ Particles" : "✺ Galaxy"}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                         <p className="text-xs text-muted-foreground">
                                             {animationType === "particles"
                                                 ? "Floating 3D point cloud that drifts and rotates. Colors follow your active theme."
                                                 : "Procedural star field with twinkling and depth layers. Hue-shifts to match your theme."}
                                         </p>
+                                        {GALAXY_INCOMPATIBLE_THEMES.includes(theme) && (
+                                            <p className="text-xs text-amber-600">
+                                                Galaxy is not available with this theme due to visual inconsistencies.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -456,7 +520,7 @@ export default function SettingsPage() {
                         </section>
 
                         {/* Resume Defaults */}
-                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10">
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
                             <div className="md:w-1/3">
                                 <h3 className="text-base font-semibold">Resume Defaults</h3>
                                 <p className="mt-1 text-sm text-muted-foreground">Configure default file paths and templates.</p>
@@ -473,6 +537,68 @@ export default function SettingsPage() {
                                 <p className="text-xs text-muted-foreground">
                                     Path relative to the project root. New applications will clone from this file.
                                 </p>
+                            </div>
+                        </section>
+
+                        {/* Application Pipeline — Ghost Detection */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Application Pipeline</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Configure when applications are automatically marked as ghosted. Timers start from the last status change, not the application date.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-5">
+                                {/* Master toggle */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Auto-ghost Stale Applications</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                            Automatically mark applications as ghosted when they go silent for too long.
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={current.ghost_auto_enabled ?? true}
+                                        onCheckedChange={(checked) => handleChange("ghost_auto_enabled", checked)}
+                                    />
+                                </div>
+
+                                {/* Threshold inputs — only visible when auto-ghost is on */}
+                                {(current.ghost_auto_enabled ?? true) && (
+                                    <div className="space-y-4 pl-0 pt-1">
+                                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Days before ghosting per stage</p>
+                                        {([
+                                            { key: "ghost_applied_days" as const, label: "Applied", hint: "Days since moving to Applied with no response." },
+                                            { key: "ghost_screening_days" as const, label: "Screening", hint: "Days since entering Screening with no update." },
+                                            { key: "ghost_interviewing_days" as const, label: "Interviewing", hint: "Days since entering Interviewing with no update." },
+                                        ]).map(({ key, label, hint }) => (
+                                            <div key={key} className="flex items-start gap-4">
+                                                <div className="flex-1">
+                                                    <Label htmlFor={key} className="text-sm">{label}</Label>
+                                                    <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <Input
+                                                        id={key}
+                                                        type="number"
+                                                        min={1}
+                                                        max={365}
+                                                        value={current[key] ?? (key === "ghost_interviewing_days" ? 60 : 21)}
+                                                        onChange={(e) => {
+                                                            const v = parseInt(e.target.value, 10);
+                                                            if (!isNaN(v) && v >= 1) handleChange(key, v);
+                                                        }}
+                                                        className="w-20 text-center font-mono"
+                                                    />
+                                                    <span className="text-sm text-muted-foreground">days</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <p className="text-xs text-muted-foreground pt-1">
+                                            Individual applications can opt out of auto-ghosting from their Job Context tab.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </section>
                     </TabsContent>
