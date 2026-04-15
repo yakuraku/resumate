@@ -40,11 +40,11 @@ interface StepDef {
 }
 
 const ALL_STEPS: StepDef[] = [
-    { id: "welcome",       label: "Welcome",        icon: Sparkles },
-    { id: "api-key",       label: "AI Connection",  icon: KeyRound },
-    { id: "master-resume", label: "Master Resume",  icon: FileText },
-    { id: "context-files", label: "Context Files",  icon: Brain },
-    { id: "done",          label: "All Set",         icon: CheckCircle2 },
+    { id: "welcome", label: "Welcome", icon: Sparkles },
+    { id: "api-key", label: "AI Connection", icon: KeyRound },
+    { id: "master-resume", label: "Master Resume", icon: FileText },
+    { id: "context-files", label: "Context Files", icon: Brain },
+    { id: "done", label: "All Set", icon: CheckCircle2 },
 ];
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
@@ -241,9 +241,9 @@ function MasterResumeStep({
     };
 
     const tabs: { id: MasterResumeTab; label: string }[] = [
-        { id: "ai",     label: "Generate with AI" },
+        { id: "ai", label: "Generate with AI" },
         { id: "upload", label: "Upload file" },
-        { id: "paste",  label: "Paste YAML" },
+        { id: "paste", label: "Paste YAML" },
         { id: "detect", label: "Already in folder" },
     ];
 
@@ -901,7 +901,7 @@ export default function SetupPage() {
             } catch { /* non-blocking -- name can be updated in Settings */ }
         }
         setCurrentStep((s) => Math.min(s + 1, stepDefs.length - 1));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const activeSteps: StepId[] = [
@@ -950,9 +950,9 @@ export default function SetupPage() {
                         // Check if step is already configured
                         const stepConfigured =
                             step.id === "master-resume" ? status?.master_resume_exists :
-                            step.id === "context-files" ? status?.context_files_exist :
-                            step.id === "api-key" ? status?.api_key_configured :
-                            true;
+                                step.id === "context-files" ? status?.context_files_exist :
+                                    step.id === "api-key" ? status?.api_key_configured :
+                                        true;
 
                         return (
                             <button
@@ -963,8 +963,8 @@ export default function SetupPage() {
                                     isActive
                                         ? "bg-primary/10 text-primary font-semibold"
                                         : isDone
-                                        ? "text-muted-foreground hover:text-foreground hover:bg-muted/40"
-                                        : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/20"
+                                            ? "text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                                            : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/20"
                                 )}
                             >
                                 <div className={cn(
@@ -972,8 +972,8 @@ export default function SetupPage() {
                                     isActive
                                         ? "border-primary bg-primary text-primary-foreground"
                                         : isDone || stepConfigured
-                                        ? "border-green-500 bg-green-500/20 text-green-600"
-                                        : "border-border bg-muted/30 text-muted-foreground"
+                                            ? "border-green-500 bg-green-500/20 text-green-600"
+                                            : "border-border bg-muted/30 text-muted-foreground"
                                 )}>
                                     {(isDone || (stepConfigured && !isActive && step.id !== "welcome" && step.id !== "done"))
                                         ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
@@ -1015,57 +1015,57 @@ export default function SetupPage() {
                             "w-full",
                             masterPdfHash && stepId === "master-resume" ? "" : "max-w-xl",
                         )}>
-                        {loadingStatus ? (
-                            <div className="flex items-center gap-3 text-muted-foreground">
-                                <Loader2 className="h-5 w-5 animate-spin" />
-                                Loading setup status...
-                            </div>
-                        ) : (
-                            <>
-                                {stepId === "welcome" && (
-                                    <WelcomeStep onNext={handleWelcomeNext} initialName={preferredName} />
-                                )}
-                                {stepId === "master-resume" && (
-                                    <MasterResumeStep
-                                        alreadyDone={status?.master_resume_exists ?? false}
-                                        onNext={goNext}
-                                        onSkip={goSkip}
-                                        onStatusRefresh={refreshStatus}
-                                        onPdfReady={handlePdfReady}
-                                        apiKeyConfigured={status?.api_key_configured ?? false}
-                                    />
-                                )}
-                                {stepId === "context-files" && (
-                                    <ContextFilesStep
-                                        alreadyDone={status?.context_files_exist ?? false}
-                                        onNext={goNext}
-                                        onSkip={goSkip}
-                                        onStatusRefresh={refreshStatus}
-                                    />
-                                )}
-                                {stepId === "api-key" && (
-                                    <ApiKeyStep
-                                        alreadyDone={status?.api_key_configured ?? false}
-                                        onNext={goNext}
-                                        onSkip={goSkip}
-                                        onStatusRefresh={refreshStatus}
-                                    />
-                                )}
-                                {stepId === "done" && (
-                                    <DoneStep status={status} />
-                                )}
+                            {loadingStatus ? (
+                                <div className="flex items-center gap-3 text-muted-foreground">
+                                    <Loader2 className="h-5 w-5 animate-spin" />
+                                    Loading setup status...
+                                </div>
+                            ) : (
+                                <>
+                                    {stepId === "welcome" && (
+                                        <WelcomeStep onNext={handleWelcomeNext} initialName={preferredName} />
+                                    )}
+                                    {stepId === "master-resume" && (
+                                        <MasterResumeStep
+                                            alreadyDone={status?.master_resume_exists ?? false}
+                                            onNext={goNext}
+                                            onSkip={goSkip}
+                                            onStatusRefresh={refreshStatus}
+                                            onPdfReady={handlePdfReady}
+                                            apiKeyConfigured={status?.api_key_configured ?? false}
+                                        />
+                                    )}
+                                    {stepId === "context-files" && (
+                                        <ContextFilesStep
+                                            alreadyDone={status?.context_files_exist ?? false}
+                                            onNext={goNext}
+                                            onSkip={goSkip}
+                                            onStatusRefresh={refreshStatus}
+                                        />
+                                    )}
+                                    {stepId === "api-key" && (
+                                        <ApiKeyStep
+                                            alreadyDone={status?.api_key_configured ?? false}
+                                            onNext={goNext}
+                                            onSkip={goSkip}
+                                            onStatusRefresh={refreshStatus}
+                                        />
+                                    )}
+                                    {stepId === "done" && (
+                                        <DoneStep status={status} />
+                                    )}
 
-                                {/* Back button (not on welcome or done) */}
-                                {currentStep > 0 && stepId !== "done" && (
-                                    <button
-                                        onClick={goPrev}
-                                        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-8"
-                                    >
-                                        <ChevronLeft className="h-4 w-4" /> Back
-                                    </button>
-                                )}
-                            </>
-                        )}
+                                    {/* Back button (not on welcome or done) */}
+                                    {currentStep > 0 && stepId !== "done" && (
+                                        <button
+                                            onClick={goPrev}
+                                            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-8"
+                                        >
+                                            <ChevronLeft className="h-4 w-4" /> Back
+                                        </button>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
 
