@@ -6,7 +6,6 @@ import { useTheme } from "@/components/theme-provider";
 import { SetupService, SetupStatus } from "@/services/setup.service";
 import { SettingsService } from "@/services/settings.service";
 import { contextFilesService } from "@/services/contextFiles.service";
-import { SettingsService } from "@/services/settings.service";
 import { GenerateWithAiTab } from "@/components/setup/GenerateWithAiTab";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";

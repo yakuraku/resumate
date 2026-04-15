@@ -10,8 +10,18 @@ export default function Home() {
 
     useEffect(() => {
         SetupService.getStatus()
-            .then((status) => {
-                if (status.wizard_dismissed) {
+            .then(async (status) => {
+                // Treat the user as set up if the wizard was explicitly dismissed
+                // OR if they already have a master resume and an API key configured
+                // (handles existing users who never clicked the final "Open Dashboard" button).
+                const isReady =
+                    status.wizard_dismissed ||
+                    (status.master_resume_exists && status.api_key_configured);
+                if (isReady) {
+                    // Persist the dismissed flag so future startups skip this compound check.
+                    if (!status.wizard_dismissed) {
+                        try { await SetupService.dismissWizard(); } catch { /* non-blocking */ }
+                    }
                     router.replace("/dashboard");
                 } else {
                     router.replace("/setup");
