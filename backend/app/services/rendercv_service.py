@@ -115,6 +115,46 @@ class RenderCVService:
                 except Exception as e:
                     print(f"Cleanup warning: {e}")
 
+    async def render_yaml_to_bytes(self, yaml_content: str) -> tuple[bool, bytes | str]:
+        """Render YAML to PDF and return the raw bytes.
+
+        Returns (True, pdf_bytes) on success, (False, error_log_str) on failure.
+        Suitable for use with user-scoped binary storage: caller uploads the
+        bytes and never touches a filesystem path.
+        """
+        import uuid, shutil, asyncio, subprocess, sys
+        run_id = str(uuid.uuid4())
+        temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"render_{run_id}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = temp_dir / "cv.yaml"
+        try:
+            yaml_file.write_text(yaml_content, encoding="utf-8")
+            cmd = [sys.executable, "-m", "rendercv", "render", "cv.yaml"]
+            process = await asyncio.to_thread(
+                subprocess.run,
+                cmd,
+                cwd=str(temp_dir),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            if process.returncode != 0:
+                log = f"STDOUT:\n{process.stdout or ''}\n\nSTDERR:\n{process.stderr or ''}"
+                return False, log
+            render_output = temp_dir / "rendercv_output"
+            if not render_output.exists():
+                render_output = temp_dir
+            pdfs = list(render_output.rglob("*.pdf"))
+            if not pdfs:
+                return False, "RenderCV produced no PDF output"
+            return True, pdfs[0].read_bytes()
+        except Exception as e:
+            import traceback
+            return False, f"Render error: {e}\n{traceback.format_exc()}"
+        finally:
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+
     async def validate_yaml(self, yaml_content: str) -> tuple[bool, str]:
         """
         Validates YAML by running RenderCV render without keeping the output.

@@ -21,13 +21,13 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Add new columns to resume_versions
     op.add_column('resume_versions', sa.Column('source', sa.String(50), server_default='manual_edit', nullable=False))
-    op.add_column('resume_versions', sa.Column('is_active', sa.Boolean(), server_default='0', nullable=False))
+    op.add_column('resume_versions', sa.Column('is_active', sa.Boolean(), server_default='false', nullable=False))
     op.add_column('resume_versions', sa.Column('label', sa.String(100), nullable=True))
 
-    # Back-fill: set is_active=1 where version_number matches the resume's current_version
+    # Back-fill: set is_active where version_number matches the resume's current_version
     op.execute("""
         UPDATE resume_versions
-        SET is_active = 1
+        SET is_active = TRUE
         WHERE id IN (
             SELECT rv.id FROM resume_versions rv
             JOIN resumes r ON rv.resume_id = r.id
@@ -42,7 +42,7 @@ def upgrade() -> None:
         sa.Column('user_id', sa.String(), nullable=True),
         sa.Column('application_id', sa.String(), sa.ForeignKey('applications.id', ondelete='CASCADE'), nullable=True),
         sa.Column('rule_text', sa.Text(), nullable=False),
-        sa.Column('is_enabled', sa.Boolean(), server_default='1', nullable=False),
+        sa.Column('is_enabled', sa.Boolean(), server_default='true', nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.func.now(), onupdate=sa.func.now()),
     )

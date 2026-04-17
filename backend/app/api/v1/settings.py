@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import User
 from app.config import settings as app_settings
 from app.schemas.settings import SettingsResponse, SettingsUpdate, PromptInfo, PromptsResponse, PromptUpdate, LLMTestRequest, LLMTestResponse
 from app.services.settings_service import settings_service
@@ -15,18 +17,22 @@ PROMPT_KEYS = ["resume_tailoring", "qa_generate", "qa_rewrite", "qa_saved"]
 
 
 @router.get("", response_model=SettingsResponse)
-async def get_settings(db: AsyncSession = Depends(get_db)):
+async def get_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Get all user settings. Seeds defaults if not yet set."""
-    return await settings_service.get_settings(db)
+    return await settings_service.get_settings(db, current_user.id)
 
 
 @router.put("", response_model=SettingsResponse)
 async def update_settings(
     data: SettingsUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Upsert provided settings keys."""
-    return await settings_service.update_settings(db, data)
+    return await settings_service.update_settings(db, current_user.id, data)
 
 
 @router.post("/test-llm", response_model=LLMTestResponse)
@@ -94,7 +100,10 @@ async def test_llm_connection(data: LLMTestRequest):
 
 
 @router.get("/prompts", response_model=PromptsResponse)
-async def get_prompts(db: AsyncSession = Depends(get_db)):
+async def get_prompts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Get all system prompts with default, custom, and active values."""
     from app.services.prompts import (
         RESUME_TAILORING_SYSTEM_PROMPT,
@@ -111,12 +120,12 @@ async def get_prompts(db: AsyncSession = Depends(get_db)):
         "qa_saved": APPLICATION_QA_SYSTEM_PROMPT,
     }
 
-    raw = await settings_service._get_all_raw(db)
+    raw = await settings_service._get_all_raw(db, current_user.id)
     prompts = {}
     for key in PROMPT_KEYS:
         custom_key = f"custom_prompt_{key}"
         custom_val = raw.get(custom_key, "")
-        active = await get_active_prompt(db, key)
+        active = await get_active_prompt(db, current_user.id, key)
         prompts[key] = PromptInfo(
             key=key,
             default=defaults[key],
@@ -132,6 +141,7 @@ async def update_prompt(
     prompt_key: str,
     data: PromptUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Save a custom prompt override."""
     if prompt_key not in PROMPT_KEYS:
@@ -139,7 +149,7 @@ async def update_prompt(
         raise HTTPException(status_code=404, detail=f"Unknown prompt key: {prompt_key}")
 
     from app.schemas.settings import SettingsUpdate as SU
-    await settings_service.update_settings(db, SU(**{f"custom_prompt_{prompt_key}": data.value}))
+    await settings_service.update_settings(db, current_user.id, SU(**{f"custom_prompt_{prompt_key}": data.value}))
     return {"ok": True}
 
 
@@ -147,6 +157,7 @@ async def update_prompt(
 async def reset_prompt(
     prompt_key: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Reset a prompt to its hardcoded default by clearing the custom override."""
     if prompt_key not in PROMPT_KEYS:
@@ -154,5 +165,5 @@ async def reset_prompt(
         raise HTTPException(status_code=404, detail=f"Unknown prompt key: {prompt_key}")
 
     from app.schemas.settings import SettingsUpdate as SU
-    await settings_service.update_settings(db, SU(**{f"custom_prompt_{prompt_key}": ""}))
+    await settings_service.update_settings(db, current_user.id, SU(**{f"custom_prompt_{prompt_key}": ""}))
     return {"ok": True}

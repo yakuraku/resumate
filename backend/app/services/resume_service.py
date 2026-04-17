@@ -234,17 +234,18 @@ class ResumeService:
         if not resume.application or not resume.application.job_description:
             raise HTTPException(status_code=400, detail="Associated Application has no Job Description")
 
-        # Fetch tailor rules for this application
+        # Fetch tailor rules for this application (scoped to the owning user)
+        owner_user_id = resume.application.user_id
         from app.services.tailor_rule_service import tailor_rule_service
         rules = await tailor_rule_service.get_enabled_rule_texts(
-            db, application_id=resume.application.id
+            db, owner_user_id, application_id=resume.application.id
         )
 
         original_yaml = resume.yaml_content
         job_description = resume.application.job_description
 
         from app.services.prompts import get_active_prompt
-        active_system_prompt = await get_active_prompt(db, "resume_tailoring")
+        active_system_prompt = await get_active_prompt(db, owner_user_id, "resume_tailoring")
 
         tailored_yaml = await tailor_service.tailor_resume(
             original_yaml, job_description, rules=rules, system_prompt=active_system_prompt

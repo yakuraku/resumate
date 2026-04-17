@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: resumate-backend
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -e backend/
+    preDeployCommand: cd backend && python -m alembic upgrade head
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: AUTH_MODE
+        value: cloud
+      - key: STORAGE_BACKEND
+        value: r2
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: R2_BUCKET_NAME
+        value: resumate-files
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      # Set these in the Render dashboard (sensitive):
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CSRF_SECRET_KEY
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false

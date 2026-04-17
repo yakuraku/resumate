@@ -23,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/context/AuthContext";
+import { AuthGuard } from "@/components/AuthGuard";
 
 export default function RootLayout({
   children,
@@ -39,7 +41,11 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <ThemeProvider defaultTheme="system" storageKey="resumate-theme">
-          {children}
+          <AuthProvider>
+            <AuthGuard>
+              {children}
+            </AuthGuard>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

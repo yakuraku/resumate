@@ -39,6 +39,32 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
+    # ----- Auth (Phase 1) -----
+    # AUTH_MODE=local bypasses auth entirely: every request resolves to the
+    # BOOTSTRAP_ADMIN user. AUTH_MODE=cloud enforces JWT cookie + CSRF.
+    AUTH_MODE: str = "local"
+    JWT_SECRET_KEY: str = "dev-insecure-change-me"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    CSRF_SECRET_KEY: str = "dev-insecure-change-me"
+    ENCRYPTION_KEY: str = ""  # Fernet key; required when storing user API keys
+
+    # Bootstrap admin (used to seed local installs and during first cloud deploy).
+    BOOTSTRAP_ADMIN_EMAIL: str = "admin@localhost"
+    BOOTSTRAP_ADMIN_PASSWORD: str = "change-me"
+
+    # Cookie / CORS -- only meaningful in cloud mode.
+    COOKIE_DOMAIN: str = ""
+    COOKIE_SECURE: bool = False
+
+    # ----- Storage backend (Phase 2+) -----
+    STORAGE_BACKEND: str = "local"  # "local" | "r2"
+    R2_ACCOUNT_ID: str = ""
+    R2_BUCKET_NAME: str = "resumate-files"
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+
     model_config = SettingsConfigDict(env_file=".env")
 
 

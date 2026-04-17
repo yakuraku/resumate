@@ -1,9 +1,9 @@
-import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user_setting import UserSetting
 from app.schemas.settings import SettingsResponse, SettingsUpdate
+from app.services import encryption_service
 
 DEFAULT_SETTINGS = {
     "llm_provider": "openai",  # "openai" | "openrouter" | "gemini"
@@ -39,24 +39,70 @@ PROVIDER_DEFAULT_MODELS = {
     "gemini": "gemini-2.5-flash",
 }
 
+# Keys whose values must be encrypted at rest.
+_ENCRYPTED_KEYS = {
+    "llm_api_key",
+    "llm_api_key_openai",
+    "llm_api_key_openrouter",
+    "llm_api_key_gemini",
+}
+
+
+def _decode_for_read(key: str, value: str) -> str:
+    if key in _ENCRYPTED_KEYS and value and encryption_service.is_encrypted(value):
+        try:
+            return encryption_service.decrypt(value)
+        except Exception:
+            return ""
+    return value or ""
+
+
+def _encode_for_write(key: str, value: str) -> str:
+    if key in _ENCRYPTED_KEYS and value:
+        if encryption_service.is_encrypted(value):
+            return value
+        return encryption_service.encrypt(value)
+    return value
+
 
 class SettingsService:
 
-    async def _get_all_raw(self, db: AsyncSession) -> dict[str, str]:
-        result = await db.execute(select(UserSetting))
+    async def _get_all_raw(self, db: AsyncSession, user_id: str) -> dict[str, str]:
+        """Return decrypted key->value map for a single user."""
+        result = await db.execute(
+            select(UserSetting).where(UserSetting.user_id == user_id)
+        )
         rows = result.scalars().all()
-        return {row.setting_key: row.setting_value or "" for row in rows}
+        out: dict[str, str] = {}
+        needs_migration: list[UserSetting] = []
+        for row in rows:
+            raw_val = row.setting_value or ""
+            if row.setting_key in _ENCRYPTED_KEYS and raw_val and not encryption_service.is_encrypted(raw_val):
+                # Legacy plaintext: surface it to callers but mark for lazy encrypt.
+                out[row.setting_key] = raw_val
+                needs_migration.append(row)
+            else:
+                out[row.setting_key] = _decode_for_read(row.setting_key, raw_val)
+        if needs_migration:
+            for row in needs_migration:
+                row.setting_value = _encode_for_write(row.setting_key, row.setting_value or "")
+            await db.commit()
+        return out
 
-    async def _ensure_defaults(self, db: AsyncSession) -> None:
-        existing_raw = await self._get_all_raw(db)
+    async def _ensure_defaults(self, db: AsyncSession, user_id: str) -> None:
+        existing_raw = await self._get_all_raw(db, user_id)
+        added = False
         for key, default_value in DEFAULT_SETTINGS.items():
             if key not in existing_raw:
-                db.add(UserSetting(setting_key=key, setting_value=default_value))
-        await db.commit()
+                stored = _encode_for_write(key, default_value) if default_value else default_value
+                db.add(UserSetting(user_id=user_id, setting_key=key, setting_value=stored))
+                added = True
+        if added:
+            await db.commit()
 
-    async def get_settings(self, db: AsyncSession) -> SettingsResponse:
-        await self._ensure_defaults(db)
-        raw = await self._get_all_raw(db)
+    async def get_settings(self, db: AsyncSession, user_id: str) -> SettingsResponse:
+        await self._ensure_defaults(db, user_id)
+        raw = await self._get_all_raw(db, user_id)
 
         return SettingsResponse(
             llm_provider=raw.get("llm_provider", DEFAULT_SETTINGS["llm_provider"]),
@@ -81,45 +127,47 @@ class SettingsService:
             preferred_name=raw.get("preferred_name", ""),
         )
 
-    async def update_settings(self, db: AsyncSession, data: SettingsUpdate) -> SettingsResponse:
-        await self._ensure_defaults(db)
+    async def update_settings(self, db: AsyncSession, user_id: str, data: SettingsUpdate) -> SettingsResponse:
+        await self._ensure_defaults(db, user_id)
         update_dict = data.model_dump(exclude_unset=True)
 
         for key, value in update_dict.items():
-            # Convert boolean to string for storage
             if isinstance(value, bool):
                 str_value = "true" if value else "false"
             else:
                 str_value = str(value) if value is not None else ""
 
+            stored_value = _encode_for_write(key, str_value)
+
             result = await db.execute(
-                select(UserSetting).where(UserSetting.setting_key == key)
+                select(UserSetting).where(
+                    UserSetting.user_id == user_id,
+                    UserSetting.setting_key == key,
+                )
             )
             setting = result.scalar_one_or_none()
             if setting:
-                setting.setting_value = str_value
+                setting.setting_value = stored_value
             else:
-                db.add(UserSetting(setting_key=key, setting_value=str_value))
+                db.add(UserSetting(user_id=user_id, setting_key=key, setting_value=stored_value))
 
         await db.commit()
 
-        # If any LLM setting changed, refresh the live service
         llm_keys = {"llm_api_key", "llm_api_key_openai", "llm_api_key_openrouter", "llm_api_key_gemini", "llm_provider", "llm_model"}
         if llm_keys & update_dict.keys():
-            await self._refresh_llm_service(db)
+            await self._refresh_llm_service(db, user_id)
 
-        return await self.get_settings(db)
+        return await self.get_settings(db, user_id)
 
-    async def _refresh_llm_service(self, db: AsyncSession) -> None:
-        """Refresh the global llm_service with updated settings."""
+    async def _refresh_llm_service(self, db: AsyncSession, user_id: str) -> None:
+        """Refresh the global llm_service with updated settings for a user."""
         from app.services.llm_service import llm_service
         from app.config import settings as app_settings
-        raw = await self._get_all_raw(db)
+        raw = await self._get_all_raw(db, user_id)
 
         provider = raw.get("llm_provider", "openai")
         model = raw.get("llm_model", "")
 
-        # Prefer the provider-specific key; fall back to the legacy shared key
         provider_key_map = {
             "openai": "llm_api_key_openai",
             "openrouter": "llm_api_key_openrouter",
@@ -128,7 +176,6 @@ class SettingsService:
         api_key = raw.get(provider_key_map.get(provider, "llm_api_key"), "") or raw.get("llm_api_key", "")
 
         if not api_key:
-            # Fall back to .env values
             if app_settings.OPENAI_API_KEY:
                 api_key = app_settings.OPENAI_API_KEY
                 provider = "openai"
@@ -174,9 +221,9 @@ class SettingsService:
                     "Content-Type": "application/json",
                 }
 
-    async def get_effective_api_key(self, db: AsyncSession) -> tuple[str, str, str]:
+    async def get_effective_api_key(self, db: AsyncSession, user_id: str) -> tuple[str, str, str]:
         """Returns (api_key, provider, model) using settings with .env fallback."""
-        raw = await self._get_all_raw(db)
+        raw = await self._get_all_raw(db, user_id)
         from app.config import settings as app_settings
 
         provider = raw.get("llm_provider", "openai")

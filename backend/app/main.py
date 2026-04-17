@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
+from app.database import get_db
 import sys
 import asyncio
 
@@ -11,6 +13,11 @@ if sys.platform == "win32":
 
 def _startup_checks() -> None:
     """Run synchronous file-system checks and initialization at startup."""
+    from app.config import settings as _s
+    # Cloud mode: all content lives in Postgres/R2 -- no local filesystem to check.
+    if _s.STORAGE_BACKEND == "r2":
+        return
+
     from app.utils.filesystem import (
         get_project_root,
         get_data_dir,
@@ -95,14 +102,62 @@ async def _daily_ghost_job() -> None:
     while True:
         await asyncio.sleep(24 * 60 * 60)
         try:
+            from sqlalchemy import select
             from app.database import SessionLocal as AsyncSessionLocal
             from app.services.application_service import ApplicationService
+            from app.models.user import User
             async with AsyncSessionLocal() as db:
-                svc = ApplicationService(db)
-                await svc._auto_ghost_stale_applications()
+                users = (await db.execute(select(User))).scalars().all()
+                for user in users:
+                    svc = ApplicationService(db, user.id)
+                    await svc._auto_ghost_stale_applications()
             print("[GhostJob] Daily ghost detection completed.")
         except Exception as e:
             print(f"[GhostJob] Error during daily ghost detection: {e}")
+
+
+async def _ensure_bootstrap_admin() -> None:
+    """Create the bootstrap admin on first run (local mode convenience).
+
+    In AUTH_MODE=local the app skips the login screen and resolves every
+    request to this user, so it must exist. In cloud mode we also seed a
+    first admin from env vars so initial deployments don't need a shell.
+    """
+    from sqlalchemy import select
+    from uuid import uuid4
+    from app.config import settings
+    from app.database import SessionLocal as AsyncSessionLocal
+    from app.models.user import User
+    from app.services import auth_service
+
+    if not settings.BOOTSTRAP_ADMIN_EMAIL or not settings.BOOTSTRAP_ADMIN_PASSWORD:
+        print("[Startup] BOOTSTRAP_ADMIN_EMAIL/PASSWORD not set -- skipping admin seed.")
+        return
+
+    email = settings.BOOTSTRAP_ADMIN_EMAIL.lower().strip()
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).where(User.email == email))
+        if result.scalar_one_or_none():
+            return  # already seeded
+        # Only seed if no users exist at all -- avoids accidental admin creation
+        # after an admin already made it into the table with a different email.
+        any_user = (await db.execute(select(User))).first()
+        if any_user:
+            print(
+                f"[Startup] Users table is non-empty but {email} is missing. "
+                "Skipping bootstrap seed."
+            )
+            return
+        user = User(
+            id=str(uuid4()),
+            email=email,
+            password_hash=auth_service.hash_password(settings.BOOTSTRAP_ADMIN_PASSWORD),
+            is_admin=True,
+            is_active=True,
+        )
+        db.add(user)
+        await db.commit()
+        print(f"[Startup] Seeded bootstrap admin: {email}")
 
 
 @asynccontextmanager
@@ -110,12 +165,41 @@ async def lifespan(app: FastAPI):
     # Synchronous file-system checks first (fast).
     _startup_checks()
 
+    # Ensure bootstrap admin exists. In local mode, this is required before
+    # any request can resolve its user (dependencies.get_current_user).
+    try:
+        await _ensure_bootstrap_admin()
+    except Exception as e:
+        print(f"[Startup] Bootstrap admin seed failed: {e}")
+
+    # One-shot: migrate on-disk context files / master resume / helper / PDFs
+    # into the user-scoped storage. Idempotent; skipped once DB rows exist.
+    try:
+        from sqlalchemy import select
+        from app.database import SessionLocal as AsyncSessionLocal
+        from app.models.user import User
+        from app.services.storage_seed import seed_user_from_filesystem
+        from app.config import settings
+        async with AsyncSessionLocal() as db:
+            email = settings.BOOTSTRAP_ADMIN_EMAIL.lower().strip()
+            user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+            if user:
+                await seed_user_from_filesystem(db, user.id)
+    except Exception as e:
+        print(f"[Startup] Storage seed failed: {e}")
+
     # Restore LLM settings from DB so last-selected provider is active immediately.
     try:
+        from sqlalchemy import select
         from app.database import SessionLocal as AsyncSessionLocal
         from app.services.settings_service import settings_service
+        from app.models.user import User
+        from app.config import settings
         async with AsyncSessionLocal() as db:
-            await settings_service._refresh_llm_service(db)
+            email = settings.BOOTSTRAP_ADMIN_EMAIL.lower().strip()
+            user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
+            if user:
+                await settings_service._refresh_llm_service(db, user.id)
     except Exception as e:
         print(f"[Startup] Could not restore LLM settings from DB (using .env fallback): {e}")
 
@@ -151,11 +235,19 @@ app = FastAPI(
     openapi_url="/openapi.json",
 )
 
-# CORS Middleware -- kept open for local dev. In Docker the Next.js proxy
-# handles all browser requests so CORS is not exercised from the browser.
+# CORS Middleware.
+# Build the allowed origins from the configured list, then append APP_URL
+# (the Vercel frontend) so cross-origin requests with credentials work.
+# allow_origins=["*"] is intentionally avoided -- it is incompatible with
+# allow_credentials=True (CORS spec rejects it).
+_cors_origins = list(settings.BACKEND_CORS_ORIGINS)
+if settings.APP_URL and settings.APP_URL not in _cors_origins:
+    _cors_origins.append(settings.APP_URL)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition", "Content-Type"],
@@ -166,7 +258,9 @@ app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")
-async def health_check():
+async def health_check(db: AsyncSession = Depends(get_db)):
+    from sqlalchemy import text
+    await db.execute(text("SELECT 1"))
     return {
         "status": "ok",
         "version": "0.1.0",

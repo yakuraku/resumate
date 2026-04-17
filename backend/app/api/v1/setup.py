@@ -21,6 +21,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import User
 from app.utils.filesystem import get_context_folder, get_data_dir, get_master_resume_path
 
 router = APIRouter()
@@ -176,7 +178,10 @@ def _strip_markdown_fences(text: str) -> str:
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/status", response_model=SetupStatus)
-async def get_setup_status(db: AsyncSession = Depends(get_db)):
+async def get_setup_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.config import settings as app_settings
     from app.services.settings_service import settings_service
 
@@ -191,7 +196,7 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
             for p in ctx_folder.glob("*.md")
         )
 
-    raw = await settings_service._get_all_raw(db)
+    raw = await settings_service._get_all_raw(db, current_user.id)
     provider = raw.get("llm_provider", "openai")
     provider_key_map = {
         "openai": "llm_api_key_openai",
@@ -221,7 +226,7 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/master-resume", response_model=MasterResumeContent)
-async def get_master_resume():
+async def get_master_resume(current_user: User = Depends(get_current_user)):
     master = get_master_resume_path()
     if not master.exists():
         return MasterResumeContent(content="")
@@ -229,7 +234,10 @@ async def get_master_resume():
 
 
 @router.post("/master-resume", response_model=ValidationResult)
-async def save_master_resume(body: MasterResumeSaveRequest):
+async def save_master_resume(
+    body: MasterResumeSaveRequest,
+    current_user: User = Depends(get_current_user),
+):
     # Strip markdown fences that LLMs commonly add around YAML output.
     content = _strip_markdown_fences(body.content)
     if not content:
@@ -265,7 +273,7 @@ async def save_master_resume(body: MasterResumeSaveRequest):
 
 
 @router.get("/master-resume/pdf")
-async def get_master_resume_pdf():
+async def get_master_resume_pdf(current_user: User = Depends(get_current_user)):
     """Serve the most recently rendered master resume preview PDF."""
     preview_path = get_data_dir() / "master-resume-preview.pdf"
     if not preview_path.exists():
@@ -281,7 +289,10 @@ async def get_master_resume_pdf():
 
 
 @router.post("/generate-resume-yaml", response_model=GenerateResumeResponse)
-async def generate_resume_yaml(body: GenerateResumeRequest):
+async def generate_resume_yaml(
+    body: GenerateResumeRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Call the configured LLM to draft (or fix) a master resume YAML.
 
@@ -332,8 +343,11 @@ async def generate_resume_yaml(body: GenerateResumeRequest):
 
 
 @router.post("/wizard/dismiss")
-async def dismiss_wizard(db: AsyncSession = Depends(get_db)):
+async def dismiss_wizard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.schemas.settings import SettingsUpdate
     from app.services.settings_service import settings_service
-    await settings_service.update_settings(db, SettingsUpdate(wizard_dismissed=True))
+    await settings_service.update_settings(db, current_user.id, SettingsUpdate(wizard_dismissed=True))
     return {"status": "ok"}
