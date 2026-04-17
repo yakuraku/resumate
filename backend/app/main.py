@@ -257,7 +257,7 @@ from app.api.v1.router import api_router
 app.include_router(api_router, prefix="/api/v1")
 
 
-@app.get("/api/v1/health")
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 async def health_check(db: AsyncSession = Depends(get_db)):
     from sqlalchemy import text
     await db.execute(text("SELECT 1"))
