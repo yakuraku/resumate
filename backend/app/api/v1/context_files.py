@@ -1,36 +1,32 @@
-import json
+"""Context files: user-scoped markdown snippets used by the AI tailor.
+
+Post-Phase-2 this is fully DB-backed via text_storage_service. The legacy
+/config endpoints remain for frontend compatibility but the folder_path
+they return is a read-only display value -- there is no on-disk folder
+anymore. Files are keyed by (user_id, filename).
+"""
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.filesystem import get_data_dir, get_context_folder
+from app.database import get_db
+from app.dependencies import get_current_user
+from app.models.user import User
+from app.services import text_storage_service
 
 router = APIRouter()
-
-CONFIG_PATH = get_data_dir() / "context_config.json"
 
 
 # ---------- helpers ----------
 
 def _validate_filename(filename: str) -> None:
-    """Raise 400 if filename is unsafe or not .md"""
     if not filename.endswith(".md"):
         raise HTTPException(status_code=400, detail="Filename must end with .md")
     if any(c in filename for c in ("..", "/", "\\")):
         raise HTTPException(status_code=400, detail="Filename contains invalid characters")
-
-
-def _safe_path(filename: str) -> Path:
-    """Return absolute path inside the context folder; raise 400 on traversal."""
-    _validate_filename(filename)
-    folder = get_context_folder()
-    resolved = (folder / filename).resolve()
-    if not str(resolved).startswith(str(folder.resolve())):
-        raise HTTPException(status_code=400, detail="Path traversal detected")
-    return resolved
 
 
 # ---------- schemas ----------
@@ -40,7 +36,7 @@ class ConfigResponse(BaseModel):
 
 
 class ConfigUpdate(BaseModel):
-    folder_path: str
+    folder_path: str  # accepted but ignored post-Phase-2
 
 
 class FileInfo(BaseModel):
@@ -65,113 +61,130 @@ class FileUpdate(BaseModel):
     content: str
 
 
-# ---------- config endpoints ----------
+# ---------- config (legacy shim for frontend) ----------
 
 @router.get("/config", response_model=ConfigResponse)
 async def get_config():
-    folder = get_context_folder()
-    return ConfigResponse(folder_path=str(folder))
+    # Display-only: frontend shows this to communicate where files "live".
+    return ConfigResponse(folder_path="(stored in database)")
 
 
 @router.put("/config", response_model=ConfigResponse)
 async def update_config(body: ConfigUpdate):
-    folder = Path(body.folder_path)
-    if not folder.is_absolute():
-        raise HTTPException(status_code=400, detail="folder_path must be an absolute path")
-    if not folder.exists():
-        raise HTTPException(status_code=400, detail="Folder does not exist")
-    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(json.dumps({"folder_path": str(folder)}), encoding="utf-8")
-    return ConfigResponse(folder_path=str(folder))
+    # Accepted for backward compat; DB-backed storage ignores folder paths.
+    return ConfigResponse(folder_path="(stored in database)")
 
 
 # ---------- file CRUD ----------
 
 @router.get("/", response_model=List[FileInfo])
-async def list_files():
-    folder = get_context_folder()
-    if not folder.exists():
-        return []
-    files = []
-    for p in sorted(folder.glob("*.md")):
-        stat = p.stat()
-        content = p.read_text(encoding="utf-8", errors="replace")
-        files.append(FileInfo(
-            filename=p.name,
-            size_bytes=stat.st_size,
-            modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-            preview=content[:150],
-        ))
-    return files
+async def list_files(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    rows = await text_storage_service.list_context_files(db, current_user.id)
+    return [
+        FileInfo(
+            filename=r.filename,
+            size_bytes=r.size_bytes,
+            modified_at=r.updated_at.replace(tzinfo=r.updated_at.tzinfo or timezone.utc).isoformat(),
+            preview=r.content[:150],
+        )
+        for r in rows
+    ]
 
 
 @router.get("/{filename}", response_model=FileContent)
-async def get_file(filename: str):
-    path = _safe_path(filename)
-    if not path.exists():
+async def get_file(
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _validate_filename(filename)
+    row = await text_storage_service.get_context_file(db, current_user.id, filename)
+    if row is None:
         raise HTTPException(status_code=404, detail="File not found")
-    stat = path.stat()
     return FileContent(
         filename=filename,
-        content=path.read_text(encoding="utf-8", errors="replace"),
-        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        content=row.content,
+        modified_at=row.updated_at.replace(tzinfo=row.updated_at.tzinfo or timezone.utc).isoformat(),
     )
 
 
 @router.post("/", response_model=FileContent, status_code=201)
-async def create_file(body: FileCreate):
-    path = _safe_path(body.filename)
-    if path.exists():
+async def create_file(
+    body: FileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _validate_filename(body.filename)
+    existing = await text_storage_service.get_context_file(db, current_user.id, body.filename)
+    if existing is not None:
         raise HTTPException(status_code=409, detail="File already exists")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(body.content, encoding="utf-8")
-    stat = path.stat()
+    row = await text_storage_service.put_context_file(
+        db, current_user.id, body.filename, body.content
+    )
     return FileContent(
         filename=body.filename,
-        content=body.content,
-        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        content=row.content,
+        modified_at=row.updated_at.replace(tzinfo=row.updated_at.tzinfo or timezone.utc).isoformat(),
     )
 
 
 @router.put("/{filename}", response_model=FileContent)
-async def update_file(filename: str, body: FileUpdate):
-    path = _safe_path(filename)
-    if not path.exists():
+async def update_file(
+    filename: str,
+    body: FileUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _validate_filename(filename)
+    existing = await text_storage_service.get_context_file(db, current_user.id, filename)
+    if existing is None:
         raise HTTPException(status_code=404, detail="File not found")
-    path.write_text(body.content, encoding="utf-8")
-    stat = path.stat()
+    row = await text_storage_service.put_context_file(db, current_user.id, filename, body.content)
     return FileContent(
         filename=filename,
-        content=body.content,
-        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        content=row.content,
+        modified_at=row.updated_at.replace(tzinfo=row.updated_at.tzinfo or timezone.utc).isoformat(),
     )
 
 
 @router.delete("/{filename}")
-async def delete_file(filename: str):
-    path = _safe_path(filename)
-    if not path.exists():
+async def delete_file(
+    filename: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _validate_filename(filename)
+    deleted = await text_storage_service.delete_context_file(db, current_user.id, filename)
+    if not deleted:
         raise HTTPException(status_code=404, detail="File not found")
-    path.unlink()
     return {"status": "success"}
 
 
 @router.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
-    folder = get_context_folder()
-    folder.mkdir(parents=True, exist_ok=True)
+async def upload_files(
+    files: List[UploadFile] = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     results = []
     for upload in files:
         name = upload.filename or ""
         if not name.endswith(".md") or any(c in name for c in ("..", "/", "\\")):
             results.append({"filename": name, "status": "skipped", "reason": "invalid filename"})
             continue
-        dest = folder / name
-        if dest.exists():
+        existing = await text_storage_service.get_context_file(db, current_user.id, name)
+        if existing is not None:
             results.append({"filename": name, "status": "skipped", "reason": "already exists"})
             continue
-        content = await upload.read()
-        dest.write_bytes(content)
+        raw = await upload.read()
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            content = raw.decode("utf-8", errors="replace")
+        await text_storage_service.put_context_file(db, current_user.id, name, content)
         results.append({"filename": name, "status": "created"})
     return {"results": results}
 
@@ -184,8 +197,12 @@ class IngestRequest(BaseModel):
 
 
 @router.post("/ingest", status_code=201)
-async def ingest_to_file(body: IngestRequest):
-    """Extract structured context via LLM and save as a .md file."""
+async def ingest_to_file(
+    body: IngestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Extract structured context via LLM and save as a user-scoped markdown file."""
     from app.services.llm_service import llm_service
     from app.services.prompts import (
         CONTEXT_EXTRACTION_SYSTEM_PROMPT,
@@ -217,7 +234,6 @@ async def ingest_to_file(body: IngestRequest):
     except _json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse LLM response")
 
-    # Build markdown content
     lines = []
     for item in items:
         key = item.get("key", "")
@@ -232,18 +248,20 @@ async def ingest_to_file(body: IngestRequest):
     if not filename.endswith(".md"):
         filename += ".md"
 
-    path = _safe_path(filename)
-    if path.exists():
-        # Append with separator
-        existing = path.read_text(encoding="utf-8")
-        path.write_text(existing + f"\n\n---\n\n{md_content}", encoding="utf-8")
+    _validate_filename(filename)
+    existing = await text_storage_service.get_context_file(db, current_user.id, filename)
+    if existing is not None:
+        combined = existing.content + f"\n\n---\n\n{md_content}"
+        row = await text_storage_service.put_context_file(
+            db, current_user.id, filename, combined
+        )
     else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(md_content, encoding="utf-8")
+        row = await text_storage_service.put_context_file(
+            db, current_user.id, filename, md_content
+        )
 
-    stat = path.stat()
     return FileContent(
         filename=filename,
-        content=path.read_text(encoding="utf-8"),
-        modified_at=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+        content=row.content,
+        modified_at=row.updated_at.replace(tzinfo=row.updated_at.tzinfo or timezone.utc).isoformat(),
     )

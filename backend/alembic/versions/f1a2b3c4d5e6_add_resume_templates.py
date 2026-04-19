@@ -36,8 +36,8 @@ def upgrade() -> None:
         sa.Column('id', sa.String(), nullable=False),
         sa.Column('name', sa.String(length=255), nullable=False),
         sa.Column('yaml_content', sa.Text(), nullable=False),
-        sa.Column('is_master', sa.Boolean(), nullable=False, server_default=sa.text('0')),
-        sa.Column('is_starred', sa.Boolean(), nullable=False, server_default=sa.text('0')),
+        sa.Column('is_master', sa.Boolean(), nullable=False, server_default=sa.text('false')),
+        sa.Column('is_starred', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.PrimaryKeyConstraint('id'),
@@ -61,17 +61,19 @@ def upgrade() -> None:
 
     master_yaml = _read_master_yaml()
     master_id = str(uuid.uuid4())
-    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    now = datetime.utcnow()
 
     conn.execute(
         text(
             "INSERT INTO resume_templates (id, name, yaml_content, is_master, is_starred, created_at, updated_at) "
-            "VALUES (:id, :name, :yaml_content, 1, 0, :created_at, :updated_at)"
+            "VALUES (:id, :name, :yaml_content, :is_master, :is_starred, :created_at, :updated_at)"
         ),
         {
             "id": master_id,
             "name": "Master Resume",
             "yaml_content": master_yaml,
+            "is_master": True,
+            "is_starred": False,
             "created_at": now,
             "updated_at": now,
         }
@@ -99,12 +101,14 @@ def upgrade() -> None:
         conn.execute(
             text(
                 "INSERT INTO resume_templates (id, name, yaml_content, is_master, is_starred, created_at, updated_at) "
-                "VALUES (:id, :name, :yaml_content, 0, 0, :created_at, :updated_at)"
+                "VALUES (:id, :name, :yaml_content, :is_master, :is_starred, :created_at, :updated_at)"
             ),
             {
                 "id": template_id,
                 "name": template_name,
                 "yaml_content": yaml_content,
+                "is_master": False,
+                "is_starred": False,
                 "created_at": now,
                 "updated_at": now,
             }

@@ -9,3 +9,7 @@ from .tailor_rule import TailorRule
 from .application_question import ApplicationQuestion
 from .user_setting import UserSetting
 from .application_credential import ApplicationCredential
+from .user import User
+from .master_resume import MasterResume
+from .context_file import ContextFile
+from .tailor_helper import TailorHelper

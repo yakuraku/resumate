@@ -8,19 +8,52 @@ const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export const apiClient = axios.create({
   baseURL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+
 apiClient.interceptors.request.use(
-  (config) => config,
+  async (config) => {
+    const method = (config.method ?? '').toLowerCase();
+    if (MUTATING_METHODS.has(method)) {
+      // Import lazily to avoid circular dependency at module init time
+      const { getCsrfToken } = await import('./csrf');
+      const token = await getCsrfToken();
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers['X-CSRF-Token'] = token;
+      }
+    }
+    return config;
+  },
   (error) => Promise.reject(error)
 );
 
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    const status = error.response?.status;
+    const url: string = error.config?.url ?? '';
+
+    if (status === 401) {
+      // Avoid redirect loop: skip when the failing call is /me itself
+      const isAuthMe = url.includes('auth/me');
+      if (!isAuthMe) {
+        // Lazy import to avoid circular dep
+        import('./csrf').then(({ clearCsrfToken }) => clearCsrfToken());
+        if (typeof window !== 'undefined') {
+          try { localStorage.removeItem('rm_user'); } catch { /* ignore */ }
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
+      }
+    }
+
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }

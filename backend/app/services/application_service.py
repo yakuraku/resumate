@@ -11,8 +11,9 @@ from datetime import date, datetime, timedelta, timezone
 import uuid
 
 class ApplicationService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str):
         self.db = db
+        self.user_id = user_id
 
     async def _auto_ghost_stale_applications(self) -> None:
         """
@@ -33,7 +34,7 @@ class ApplicationService:
         """
         from app.services.settings_service import settings_service
 
-        raw = await settings_service._get_all_raw(self.db)
+        raw = await settings_service._get_all_raw(self.db, self.user_id)
 
         if raw.get("ghost_auto_enabled", "true").lower() != "true":
             return
@@ -59,6 +60,7 @@ class ApplicationService:
             # is fine here since volumes are small and avoids SQLite date-cast complexity.
             candidates_result = await self.db.execute(
                 select(Application)
+                .where(Application.user_id == self.user_id)
                 .where(Application.status == status)
                 .where(Application.ghost_disabled == False)  # noqa: E712
             )
@@ -91,8 +93,8 @@ class ApplicationService:
         # Auto-ghost stale applied applications before returning results
         await self._auto_ghost_stale_applications()
 
-        query = select(Application)
-        count_query = select(func.count()).select_from(Application)
+        query = select(Application).where(Application.user_id == self.user_id)
+        count_query = select(func.count()).select_from(Application).where(Application.user_id == self.user_id)
 
         if status:
             query = query.where(Application.status == status)
@@ -108,6 +110,7 @@ class ApplicationService:
 
     async def create(self, data: ApplicationCreate) -> Application:
         app = Application(**data.model_dump())
+        app.user_id = self.user_id
         app.status_changed_at = datetime.now(timezone.utc)
         self.db.add(app)
         await self.db.commit()
@@ -115,7 +118,12 @@ class ApplicationService:
         return app
 
     async def get(self, id: str) -> Optional[Application]:
-        result = await self.db.execute(select(Application).where(Application.id == id))
+        result = await self.db.execute(
+            select(Application).where(
+                Application.id == id,
+                Application.user_id == self.user_id,
+            )
+        )
         return result.scalars().first()
 
     async def update(self, id: str, data: ApplicationUpdate) -> Optional[Application]:
@@ -147,7 +155,7 @@ class ApplicationService:
         # Load application with its resume and versions in one query
         result = await self.db.execute(
             select(Application)
-            .where(Application.id == id)
+            .where(Application.id == id, Application.user_id == self.user_id)
             .options(
                 selectinload(Application.resume).selectinload(Resume.versions)
             )
@@ -177,7 +185,10 @@ class ApplicationService:
                 counter = 2
                 while True:
                     existing = await self.db.execute(
-                        select(ResumeTemplate).where(ResumeTemplate.name == template_name)
+                        select(ResumeTemplate).where(
+                            ResumeTemplate.name == template_name,
+                            ResumeTemplate.user_id == self.user_id,
+                        )
                     )
                     if not existing.scalars().first():
                         break
@@ -186,6 +197,7 @@ class ApplicationService:
 
                 new_template = ResumeTemplate(
                     id=str(uuid.uuid4()),
+                    user_id=self.user_id,
                     name=template_name,
                     yaml_content=yaml_to_save,
                     is_master=False,
@@ -219,8 +231,15 @@ class ApplicationService:
         if status == "applied" and app.status != "applied":
             if app.resume_template_id and not app.resume_snapshot_yaml:
                 from app.models.resume_template import ResumeTemplate
+                from sqlalchemy import or_
                 result = await self.db.execute(
-                    select(ResumeTemplate).where(ResumeTemplate.id == app.resume_template_id)
+                    select(ResumeTemplate).where(
+                        ResumeTemplate.id == app.resume_template_id,
+                        or_(
+                            ResumeTemplate.user_id == self.user_id,
+                            ResumeTemplate.is_master == True,  # noqa: E712
+                        ),
+                    )
                 )
                 template = result.scalars().first()
                 if template:
@@ -243,7 +262,10 @@ class ApplicationService:
 
         company = app.company
         result = await self.db.execute(
-            select(Application).where(Application.company == company)
+            select(Application).where(
+                Application.company == company,
+                Application.user_id == self.user_id,
+            )
         )
         apps = result.scalars().all()
         for a in apps:
@@ -271,8 +293,15 @@ class ApplicationService:
 
         if resume_template_id is not None:
             from app.models.resume_template import ResumeTemplate
+            from sqlalchemy import or_
             result = await self.db.execute(
-                select(ResumeTemplate).where(ResumeTemplate.id == resume_template_id)
+                select(ResumeTemplate).where(
+                    ResumeTemplate.id == resume_template_id,
+                    or_(
+                        ResumeTemplate.user_id == self.user_id,
+                        ResumeTemplate.is_master == True,  # noqa: E712
+                    ),
+                )
             )
             if not result.scalars().first():
                 raise HTTPException(status_code=404, detail="ResumeTemplate not found")

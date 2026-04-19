@@ -49,10 +49,10 @@ AGENT_SYSTEM_PROMPT = _load("agent_system.md")
 REFINE_ANSWER_SYSTEM_PROMPT = _load("refine_answer_system.md")
 
 
-async def get_active_prompt(db: "AsyncSession", prompt_key: str) -> str:
-    """Return custom prompt if set in settings, otherwise return the hardcoded default."""
+async def get_active_prompt(db: "AsyncSession", user_id: str, prompt_key: str) -> str:
+    """Return custom prompt if set in user settings, otherwise return the hardcoded default."""
     from app.services.settings_service import settings_service
-    raw = await settings_service._get_all_raw(db)
+    raw = await settings_service._get_all_raw(db, user_id)
 
     custom_key = f"custom_prompt_{prompt_key}"
     custom_value = raw.get(custom_key, "")

@@ -21,7 +21,9 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.utils.filesystem import get_context_folder, get_data_dir, get_master_resume_path
+from app.dependencies import get_current_user
+from app.models.user import User
+from app.utils.filesystem import get_data_dir
 
 router = APIRouter()
 
@@ -176,22 +178,22 @@ def _strip_markdown_fences(text: str) -> str:
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
 @router.get("/status", response_model=SetupStatus)
-async def get_setup_status(db: AsyncSession = Depends(get_db)):
+async def get_setup_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.config import settings as app_settings
     from app.services.settings_service import settings_service
+    from app.services import text_storage_service
 
-    master = get_master_resume_path()
-    master_exists = master.exists() and master.stat().st_size > 10
+    # Use DB-backed storage (works in both local and cloud/R2 mode).
+    master_row = await text_storage_service.get_master_resume(db, current_user.id)
+    master_exists = bool(master_row and master_row.yaml_content and len(master_row.yaml_content) > 10)
 
-    ctx_folder = get_context_folder()
-    context_exists = False
-    if ctx_folder.exists():
-        context_exists = any(
-            p.stat().st_size > 0
-            for p in ctx_folder.glob("*.md")
-        )
+    context_files = await text_storage_service.list_context_files(db, current_user.id)
+    context_exists = any(f.size_bytes > 0 for f in context_files)
 
-    raw = await settings_service._get_all_raw(db)
+    raw = await settings_service._get_all_raw(db, current_user.id)
     provider = raw.get("llm_provider", "openai")
     provider_key_map = {
         "openai": "llm_api_key_openai",
@@ -221,53 +223,53 @@ async def get_setup_status(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/master-resume", response_model=MasterResumeContent)
-async def get_master_resume():
-    master = get_master_resume_path()
-    if not master.exists():
-        return MasterResumeContent(content="")
-    return MasterResumeContent(content=master.read_text(encoding="utf-8"))
+async def get_master_resume(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.services import text_storage_service
+    master_row = await text_storage_service.get_master_resume(db, current_user.id)
+    return MasterResumeContent(content=master_row.yaml_content if master_row else "")
 
 
 @router.post("/master-resume", response_model=ValidationResult)
-async def save_master_resume(body: MasterResumeSaveRequest):
-    # Strip markdown fences that LLMs commonly add around YAML output.
+async def save_master_resume(
+    body: MasterResumeSaveRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     content = _strip_markdown_fences(body.content)
     if not content:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
-    # Quick YAML syntax check before the expensive RenderCV call.
     try:
         import yaml
         yaml.safe_load(content)
     except Exception as exc:
         return ValidationResult(valid=False, error=f"Invalid YAML syntax: {exc}")
 
-    # Full RenderCV validation via rendercv_service.validate_yaml (clean error messages).
     from app.services.rendercv_service import rendercv_service
     valid, error_msg = await rendercv_service.validate_yaml(content)
     if not valid:
         return ValidationResult(valid=False, error=error_msg)
 
-    # Validation passed -- render to PDF and save the preview file.
-    preview_path = get_data_dir() / "master-resume-preview.pdf"
+    # Render a preview PDF to the local temp dir, scoped per user to avoid race conditions.
+    preview_path = get_data_dir() / f"master-resume-preview-{current_user.id}.pdf"
     render_ok, render_err = await rendercv_service.render_yaml_to_pdf(content, preview_path)
     if not render_ok:
-        # The YAML is structurally valid but PDF generation failed (fonts, etc.).
-        # Still save the YAML -- just report the render error without blocking.
         print(f"[Setup] Warning: preview PDF render failed after validation: {render_err[:200]}")
 
-    # Persist the YAML.
-    master = get_master_resume_path()
-    master.parent.mkdir(parents=True, exist_ok=True)
-    master.write_text(content, encoding="utf-8")
+    # Persist YAML to DB (works in both local and cloud/R2 mode).
+    from app.services import text_storage_service
+    await text_storage_service.put_master_resume(db, current_user.id, content)
 
     return ValidationResult(valid=True)
 
 
 @router.get("/master-resume/pdf")
-async def get_master_resume_pdf():
+async def get_master_resume_pdf(current_user: User = Depends(get_current_user)):
     """Serve the most recently rendered master resume preview PDF."""
-    preview_path = get_data_dir() / "master-resume-preview.pdf"
+    preview_path = get_data_dir() / f"master-resume-preview-{current_user.id}.pdf"
     if not preview_path.exists():
         raise HTTPException(
             status_code=404,
@@ -281,7 +283,10 @@ async def get_master_resume_pdf():
 
 
 @router.post("/generate-resume-yaml", response_model=GenerateResumeResponse)
-async def generate_resume_yaml(body: GenerateResumeRequest):
+async def generate_resume_yaml(
+    body: GenerateResumeRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Call the configured LLM to draft (or fix) a master resume YAML.
 
@@ -332,8 +337,11 @@ async def generate_resume_yaml(body: GenerateResumeRequest):
 
 
 @router.post("/wizard/dismiss")
-async def dismiss_wizard(db: AsyncSession = Depends(get_db)):
+async def dismiss_wizard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     from app.schemas.settings import SettingsUpdate
     from app.services.settings_service import settings_service
-    await settings_service.update_settings(db, SettingsUpdate(wizard_dismissed=True))
+    await settings_service.update_settings(db, current_user.id, SettingsUpdate(wizard_dismissed=True))
     return {"status": "ok"}
