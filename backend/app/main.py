@@ -7,6 +7,25 @@ from app.database import get_db
 import sys
 import asyncio
 
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.starlette import StarletteIntegration
+    from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+    from sentry_sdk.integrations.asyncio import AsyncioIntegration
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment="production" if settings.AUTH_MODE == "cloud" else "development",
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(transaction_style="endpoint"),
+            SqlalchemyIntegration(),
+            AsyncioIntegration(),
+        ],
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 

@@ -41,3 +41,5 @@ services:
         sync: false
       - key: APP_URL
         sync: false
+      - key: SENTRY_DSN
+        sync: false

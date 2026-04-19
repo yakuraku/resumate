@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
 
+    # Error tracking
+    SENTRY_DSN: str = ""
+
     model_config = SettingsConfigDict(env_file=".env")
 
 

@@ -101,7 +101,7 @@ async def create_resume(
     app = await service.get(id)
     if not app:
         raise HTTPException(status_code=404, detail="Application not found")
-    return await resume_service.create_resume(db, application_id=id, clone_from_id=data.clone_from_id)
+    return await resume_service.create_resume(db, application_id=id, user_id=current_user.id, clone_from_id=data.clone_from_id)
 
 
 @router.post("/{id}/analyze_job")

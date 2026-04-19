@@ -20,8 +20,6 @@ from app.services.resume_service import resume_service
 from app.services.rendercv_service import rendercv_service
 from app.services.llm_service import llm_service
 from app.services.binary_storage_service import get_binary_storage
-from pathlib import Path
-
 router = APIRouter()
 
 
@@ -68,13 +66,20 @@ async def _render_and_store(
 # ---------- resume CRUD ----------
 
 @router.get("", response_model=List[ResumeRead])
-async def get_all_resumes(db: AsyncSession = Depends(get_db)):
-    return await resume_service.get_all_resumes(db)
+async def get_all_resumes(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await resume_service.get_all_resumes(db, current_user.id)
 
 
 @router.get("/{resume_id}", response_model=ResumeRead)
-async def get_resume(resume_id: str, db: AsyncSession = Depends(get_db)):
-    return await resume_service.get_resume_by_id(db, resume_id)
+async def get_resume(
+    resume_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await resume_service.get_resume_by_id(db, resume_id, current_user.id)
 
 
 @router.put("/{resume_id}/yaml", response_model=ResumeRead)
@@ -85,7 +90,7 @@ async def update_resume_yaml(
     current_user: User = Depends(get_current_user),
 ):
     """Update resume YAML (auto-save). Invalidates the cached active PDF."""
-    updated = await resume_service.update_resume_yaml_content(db, resume_id, resume_update.yaml_content)
+    updated = await resume_service.update_resume_yaml_content(db, resume_id, resume_update.yaml_content, current_user.id)
     await get_binary_storage().delete(current_user.id, _active_key(resume_id))
     return updated
 
@@ -93,8 +98,12 @@ async def update_resume_yaml(
 # ---------- versions ----------
 
 @router.get("/{resume_id}/versions", response_model=List[ResumeVersionRead])
-async def get_resume_versions(resume_id: str, db: AsyncSession = Depends(get_db)):
-    resume = await resume_service.get_resume_by_id(db, resume_id)
+async def get_resume_versions(
+    resume_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    resume = await resume_service.get_resume_by_id(db, resume_id, current_user.id)
     return resume.versions
 
 
@@ -103,9 +112,10 @@ async def save_as_new_version(
     resume_id: str,
     body: ResumeVersionCreate = ResumeVersionCreate(),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Explicitly snapshot current state as a new version."""
-    return await resume_service.save_as_new_version(db, resume_id, body.change_summary)
+    return await resume_service.save_as_new_version(db, resume_id, body.change_summary, current_user.id)
 
 
 @router.put("/{resume_id}/versions/{version_id}/activate", response_model=ResumeRead)
@@ -116,7 +126,7 @@ async def activate_version(
     current_user: User = Depends(get_current_user),
 ):
     """Set a specific version as active. Fast (no render). Invalidates cached active PDF."""
-    updated = await resume_service.activate_version(db, resume_id, version_id)
+    updated = await resume_service.activate_version(db, resume_id, version_id, current_user.id)
     await get_binary_storage().delete(current_user.id, _active_key(resume_id))
     return updated
 
@@ -130,13 +140,19 @@ async def update_version_content(
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing version's yaml_content in-place (active version only)."""
-    updated = await resume_service.update_version_content(db, resume_id, version_id, resume_update.yaml_content)
+    updated = await resume_service.update_version_content(db, resume_id, version_id, resume_update.yaml_content, current_user.id)
     await get_binary_storage().delete(current_user.id, _active_key(resume_id))
     return updated
 
 
 @router.get("/{resume_id}/versions/{version}/yaml", response_model=ResumeVersionRead)
-async def get_resume_version_content(resume_id: str, version: int, db: AsyncSession = Depends(get_db)):
+async def get_resume_version_content(
+    resume_id: str,
+    version: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await resume_service.get_resume_by_id(db, resume_id, current_user.id)
     return await resume_service.get_version(db, resume_id, version)
 
 
@@ -148,7 +164,7 @@ async def delete_version(
     current_user: User = Depends(get_current_user),
 ):
     """Delete a non-active version and its cached PDF."""
-    stored_key, version_number = await resume_service.delete_version(db, resume_id, version_id)
+    stored_key, version_number = await resume_service.delete_version(db, resume_id, version_id, current_user.id)
     storage = get_binary_storage()
     if stored_key:
         await storage.delete(current_user.id, stored_key)
@@ -196,7 +212,7 @@ async def tailor_resume(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    tailored = await resume_service.tailor_resume(db, resume_id)
+    tailored = await resume_service.tailor_resume(db, resume_id, current_user.id)
 
     key = _active_key(resume_id)
     print(f"[PDF] Re-rendering after tailor for {resume_id}...")
@@ -230,10 +246,12 @@ async def tailor_resume_stream(
 
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    if not resume.application or not resume.application.job_description:
+    if not resume.application or resume.application.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if not resume.application.job_description:
         raise HTTPException(status_code=400, detail="Application has no job description")
 
-    rules = await tailor_rule_service.get_enabled_rule_texts(db, application_id=resume.application.id)
+    rules = await tailor_rule_service.get_enabled_rule_texts(db, current_user.id, application_id=resume.application.id)
 
     original_yaml = resume.yaml_content
     job_description = resume.application.job_description
@@ -303,7 +321,7 @@ async def tailor_resume_stream(
                     await new_db.refresh(new_version)
                     await _record_pdf_render(new_db, str(new_version.id), key)
 
-                final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str)
+                final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str, user_id)
                 resume_data = ResumeRead.model_validate(final_resume)
                 yield f"data: {_json.dumps({'type': 'persisted', 'resume': resume_data.model_dump(mode='json')})}\n\n"
 
@@ -335,7 +353,7 @@ async def get_resume_pdf(
     Local backend: streams via FileResponse with ETag/Last-Modified.
     R2 backend: 302-redirects to a short-lived presigned URL (CDN handles caching).
     """
-    resume = await resume_service.get_resume_by_id(db, resume_id)
+    resume = await resume_service.get_resume_by_id(db, resume_id, current_user.id)
 
     if version_id:
         target_version = next((v for v in resume.versions if v.id == version_id), None)
@@ -428,7 +446,7 @@ async def save_pdf_to_disk(
     """
     from app.services.settings_service import settings_service as svc
 
-    resume = await resume_service.get_resume_by_id(db, resume_id)
+    resume = await resume_service.get_resume_by_id(db, resume_id, current_user.id)
 
     key = _active_key(resume_id)
     storage = get_binary_storage()

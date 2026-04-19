@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const frontendNodeModules = path.resolve(__dirname, "node_modules");
 
@@ -46,4 +47,14 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: "yakuraku",
+  project: "resumate-frontend",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  reactComponentAnnotation: { enabled: true },
+  tunnelRoute: "/monitoring",
+  hideSourceMaps: true,
+  disableLogger: true,
+  automaticVercelMonitors: false,
+});
