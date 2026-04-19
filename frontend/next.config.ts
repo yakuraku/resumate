@@ -51,10 +51,8 @@ export default withSentryConfig(nextConfig, {
   org: "yakuraku",
   project: "resumate-frontend",
   silent: !process.env.CI,
-  widenClientFileUpload: true,
-  reactComponentAnnotation: { enabled: true },
   tunnelRoute: "/monitoring",
-  hideSourceMaps: true,
-  disableLogger: true,
-  automaticVercelMonitors: false,
+  sourcemaps: {
+    deleteSourcemapsAfterUpload: true,
+  },
 });
