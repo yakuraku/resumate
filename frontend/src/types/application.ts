@@ -1,6 +1,7 @@
 export enum ApplicationStatus {
   DRAFT = "draft",
   APPLIED = "applied",
+  SCREENING = "screening",
   INTERVIEWING = "interviewing",
   OFFER = "offer",
   REJECTED = "rejected",
@@ -16,6 +17,7 @@ export interface ApplicationBase {
   source_url?: string;
   notes?: string;
   applied_date?: string; // Date string YYYY-MM-DD
+  color?: string; // hex e.g. "#3b82f6"
 }
 
 export type ApplicationCreate = ApplicationBase;
@@ -29,6 +31,8 @@ export interface ApplicationUpdate {
   source_url?: string;
   notes?: string;
   applied_date?: string;
+  color?: string;
+  ghost_disabled?: boolean;
 }
 
 export interface ApplicationResponse extends ApplicationBase {
@@ -37,6 +41,9 @@ export interface ApplicationResponse extends ApplicationBase {
   updated_at: string; // ISO datetime
   resume_template_id?: string | null;
   resume_snapshot_yaml?: string | null;
+  status_changed_at?: string | null; // ISO datetime
+  ghosted_at?: string | null; // ISO datetime
+  ghost_disabled: boolean;
 }
 
 export interface ApplicationListResponse {

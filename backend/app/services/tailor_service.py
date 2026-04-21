@@ -99,28 +99,29 @@ class TailorService:
         Tailors the resume YAML to match the job description.
         Returns the new YAML string.
         """
-        # Load user context from my_info
-        from app.utils.filesystem import get_project_root
-        import os
-        
-        user_context = ""
+        # Load user context from configured context folder
+        from app.utils.filesystem import get_context_folder, get_project_root
+
+        context_parts = []
         try:
-            my_info_dir = get_project_root() / "my_info"
-            if my_info_dir.exists():
-                for file_path in my_info_dir.glob("*.md"):
+            context_dir = get_context_folder()
+            if context_dir.exists():
+                for file_path in sorted(context_dir.glob("*.md")):
                     content = file_path.read_text(encoding="utf-8")
-                    user_context += f"\n--- {file_path.name} ---\n{content}\n"
+                    context_parts.append(f"### {file_path.stem}\n{content}")
         except Exception as e:
-            print(f"Error loading my_info: {e}")
-            
-        # Load logic/helper
+            print(f"Error loading context folder: {e}")
+
+        # Load resume-tailor-helper.md (separate system prompt helper)
         try:
             helper_path = get_project_root() / "resume-tailor-helper.md"
             if helper_path.exists():
                 content = helper_path.read_text(encoding="utf-8")
-                user_context += f"\n--- resume-tailor-helper.md ---\n{content}\n"
+                context_parts.append(f"### resume-tailor-helper\n{content}")
         except Exception as e:
             print(f"Error loading helper: {e}")
+
+        user_context = "\n\n".join(context_parts)
 
         # Build tailor rules section
         tailor_rules_text = ""

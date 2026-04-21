@@ -1,31 +1,59 @@
 import axios from 'axios';
 
-// Create axios instance with default config
+// In Docker the Next.js server proxies /api/v1/* to the backend container
+// (see next.config.ts rewrites). The browser calls the relative path so no
+// cross-origin request is made and no CORS configuration is required.
+// For local dev without Docker, set NEXT_PUBLIC_API_URL to override.
+const baseURL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8921/api/v1',
+  baseURL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add a request interceptor
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+
 apiClient.interceptors.request.use(
-  (config) => {
-    // You can add auth tokens here if needed in the future
+  async (config) => {
+    const method = (config.method ?? '').toLowerCase();
+    if (MUTATING_METHODS.has(method)) {
+      // Import lazily to avoid circular dependency at module init time
+      const { getCsrfToken } = await import('./csrf');
+      const token = await getCsrfToken();
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers['X-CSRF-Token'] = token;
+      }
+    }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Add a response interceptor
 apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
-    // Handle errors globally (e.g., logging, toast notifications)
+    const status = error.response?.status;
+    const url: string = error.config?.url ?? '';
+
+    if (status === 401) {
+      // Avoid redirect loop: skip when the failing call is /me itself
+      const isAuthMe = url.includes('auth/me');
+      if (!isAuthMe) {
+        // Lazy import to avoid circular dep
+        import('./csrf').then(({ clearCsrfToken }) => clearCsrfToken());
+        if (typeof window !== 'undefined') {
+          try { localStorage.removeItem('rm_user'); } catch { /* ignore */ }
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
+      }
+    }
+
     console.error('API Error:', error.response?.data || error.message);
     return Promise.reject(error);
   }

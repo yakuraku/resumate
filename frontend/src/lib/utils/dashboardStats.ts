@@ -146,6 +146,7 @@ export function getPipelineCounts(apps: ApplicationResponse[]): Record<Applicati
     const counts: Record<ApplicationStatus, number> = {
         [ApplicationStatus.DRAFT]: 0,
         [ApplicationStatus.APPLIED]: 0,
+        [ApplicationStatus.SCREENING]: 0,
         [ApplicationStatus.INTERVIEWING]: 0,
         [ApplicationStatus.OFFER]: 0,
         [ApplicationStatus.REJECTED]: 0,
@@ -161,6 +162,12 @@ export function getPipelineCounts(apps: ApplicationResponse[]): Record<Applicati
 export function getRecentDrafts(apps: ApplicationResponse[], n = 2): ApplicationResponse[] {
     return [...apps]
         .filter((a) => a.status === ApplicationStatus.DRAFT)
+        .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, n);
+}
+
+export function getRecentApplications(apps: ApplicationResponse[], n = 3): ApplicationResponse[] {
+    return [...apps]
         .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
         .slice(0, n);
 }

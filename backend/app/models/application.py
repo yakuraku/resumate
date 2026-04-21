@@ -1,7 +1,7 @@
 from enum import Enum
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text, Date, ForeignKey
+from sqlalchemy import String, Text, Date, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import BaseModel
 
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 class ApplicationStatus(str, Enum):
     DRAFT = "draft"
     APPLIED = "applied"
+    SCREENING = "screening"
     INTERVIEWING = "interviewing"
     OFFER = "offer"
     REJECTED = "rejected"
@@ -23,7 +24,10 @@ class ApplicationStatus(str, Enum):
 
 class Application(BaseModel):
     __tablename__ = "applications"
-    
+
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default=ApplicationStatus.DRAFT.value)
@@ -32,17 +36,25 @@ class Application(BaseModel):
     source_url: Mapped[str | None] = mapped_column(String(500))
     notes: Mapped[str | None] = mapped_column(Text)
     applied_date: Mapped[date | None] = mapped_column(Date)
+    status_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ghosted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ghost_disabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     resume_template_id: Mapped[str | None] = mapped_column(
         ForeignKey("resume_templates.id", ondelete="SET NULL"), nullable=True
     )
     resume_snapshot_yaml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
     # Relationships
-    resume: Mapped["Resume | None"] = relationship(back_populates="application", uselist=False)
+    resume: Mapped["Resume | None"] = relationship(
+        back_populates="application", uselist=False, cascade="all, delete-orphan"
+    )
     resume_template: Mapped["ResumeTemplate | None"] = relationship(
         back_populates="applications"
     )
-    chat_histories: Mapped[list["ChatHistory"]] = relationship(back_populates="application")
+    chat_histories: Mapped[list["ChatHistory"]] = relationship(
+        back_populates="application", cascade="all, delete-orphan"
+    )
     interviews: Mapped[list["InterviewSession"]] = relationship(back_populates="application", cascade="all, delete-orphan")
     questions: Mapped[list["ApplicationQuestion"]] = relationship(back_populates="application", cascade="all, delete-orphan")
     credential: Mapped["ApplicationCredential | None"] = relationship(

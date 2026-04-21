@@ -1,1 +1,5 @@
 1. GPT-5 mini is a reasoning model — when using the Chat Completions API, always use `max_completion_tokens` (not `max_tokens`) with a minimum value of 4000 to leave room for reasoning tokens, never pass `temperature`, and always handle `choices[0].message.content` being `null` or empty since reasoning models can consume the entire output budget on reasoning tokens.
+2. ALWAYS ask the user if you have any questions or if you need additional clarity to do the work you are requested.
+3. NEVER use emdash anywhere.
+4. ALWAYS account for edge cases, Inform the user of any edge cases you find and how you plan to handle them. Only proceed after you get the user's approval.
+5. Use MCP wherever necessary like vercel, supabase, context7 depending on the requirement. For example, if you need to check the status of a deployment, use the vercel mcp. If you need to check the status of a database, use the supabase mcp. If you are working on something new that requires you to change or explore different frameworks or libraries, use the context7 mcp.

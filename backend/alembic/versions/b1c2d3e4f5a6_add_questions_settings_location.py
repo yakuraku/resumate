@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column('application_id', sa.String(), sa.ForeignKey('applications.id', ondelete='CASCADE'), nullable=False),
         sa.Column('question_text', sa.Text(), nullable=False),
         sa.Column('answer_text', sa.Text(), nullable=True),
-        sa.Column('is_ai_generated', sa.Boolean(), server_default='0', nullable=False),
+        sa.Column('is_ai_generated', sa.Boolean(), server_default='false', nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.func.now()),
     )

@@ -78,7 +78,7 @@ ResuMate/
     
     # AI Provider Keys
     OPENAI_API_KEY=your_openai_key_here
-    OPENAI_MODEL=gpt-4o-mini
+    OPENAI_MODEL=gpt-5-mini
     # OR
     OPENROUTER_API_KEY=your_openrouter_key_here
     DEFAULT_MODEL=anthropic/claude-sonnet-4
@@ -114,6 +114,7 @@ ResuMate/
 *   **Database:** The SQLite database is located at `backend/data/resumate.db`. Use Alembic for any schema changes.
 *   **Resume Data:** The `master-resume_CV.yaml` file in the root is the core data source. The backend reads this file to generate PDFs.
 *   **Personal Context:** Add markdown files to `my_info/` describing your projects, work experience, or skills. The Tailor Service reads all `.md` files in this directory to provide context to the LLM.
+    *   **Adding new context files:** Drop a `.md` file into `my_info/`, then add a corresponding entry in `my_info/projects.md` with a brief summary and a `**Relevant for:**` line so the AI agent knows when to read it.
 
 ## 📝 License
 Proprietary - Internal Use Only.

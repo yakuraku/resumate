@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowUpRight, TrendingUp, Flame, Trophy } from "lucide-react";
-import { ApplicationResponse } from "@/types/application";
-import { getTodayCount, getThisWeekCount, getWeeklySparkline, getCurrentStreak, getLongestStreak } from "@/lib/utils/dashboardStats";
+import { ArrowUpRight, Layers, Flame, Trophy } from "lucide-react";
+import { ApplicationResponse, ApplicationStatus } from "@/types/application";
+import { getTodayCount, getCurrentStreak, getLongestStreak } from "@/lib/utils/dashboardStats";
 import { SkeletonStatCard } from "@/components/shared/Skeletons";
 import { cn } from "@/lib/utils";
 
@@ -14,20 +14,15 @@ interface StatsCardsProps {
 
 export function StatsCards({ applications, isLoading }: StatsCardsProps) {
     const todayCount = useMemo(() => getTodayCount(applications), [applications]);
-    const weekCount = useMemo(() => getThisWeekCount(applications), [applications]);
-    const sparkline = useMemo(() => getWeeklySparkline(applications), [applications]);
+    const totalCount = applications.length;
+    const activeCount = useMemo(() => applications.filter(a =>
+        a.status === ApplicationStatus.APPLIED || a.status === ApplicationStatus.SCREENING || a.status === ApplicationStatus.INTERVIEWING || a.status === ApplicationStatus.OFFER
+    ).length, [applications]);
     const currentStreak = useMemo(() => getCurrentStreak(applications), [applications]);
     const longestStreak = useMemo(() => getLongestStreak(applications), [applications]);
 
     const todayTarget = 5;
     const todayProgress = Math.min(100, Math.round((todayCount / todayTarget) * 100));
-    const sparkMax = Math.max(...sparkline, 1);
-
-    // Week-over-week change
-    const prevWeekCount = sparkline[sparkline.length - 2] ?? 0;
-    const weekChange = prevWeekCount === 0
-        ? null
-        : Math.round(((weekCount - prevWeekCount) / prevWeekCount) * 100);
 
     const streakDiff = longestStreak - currentStreak;
 
@@ -67,50 +62,24 @@ export function StatsCards({ applications, isLoading }: StatsCardsProps) {
                 </div>
             </div>
 
-            {/* Card 2: This Week */}
+            {/* Card 2: All Applications */}
             <div className="bg-card border border-border rounded-xl p-5 card-lift flex flex-col justify-between">
                 <div className="flex items-start justify-between mb-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                        This Week
+                        All Applications
                     </p>
                     <div className="flex items-center justify-center size-8 rounded-lg bg-violet-500/10">
-                        <TrendingUp size={15} className="text-violet-400" />
+                        <Layers size={15} className="text-violet-400" />
                     </div>
                 </div>
                 <div>
-                    <div className="flex items-center gap-2 mb-3">
-                        <span className="text-3xl font-bold text-foreground">{weekCount}</span>
-                        <span className="text-xs text-muted-foreground">apps</span>
-                        {weekChange !== null && (
-                            <span className={cn(
-                                "text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                                weekChange >= 0
-                                    ? "bg-emerald-500/15 text-emerald-400"
-                                    : "bg-red-500/15 text-red-400"
-                            )}>
-                                {weekChange >= 0 ? "+" : ""}{weekChange}%
-                            </span>
-                        )}
+                    <div className="flex items-baseline gap-1.5 mb-1">
+                        <span className="text-3xl font-bold text-foreground">{totalCount}</span>
+                        <span className="text-sm text-muted-foreground">total</span>
                     </div>
-                    {/* Sparkline */}
-                    <div className="flex items-end gap-1 h-8">
-                        {sparkline.map((val, i) => {
-                            const heightPct = Math.max(12, Math.round((val / sparkMax) * 100));
-                            const isLast = i === sparkline.length - 1;
-                            return (
-                                <div key={i} className="flex-1 flex flex-col justify-end">
-                                    <div
-                                        className={cn(
-                                            "rounded-sm transition-all",
-                                            isLast ? "bg-primary" : "bg-muted"
-                                        )}
-                                        style={{ height: `${heightPct}%` }}
-                                        title={`Week ${i + 1}: ${val} apps`}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        {activeCount} active in pipeline
+                    </p>
                 </div>
             </div>
 

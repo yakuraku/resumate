@@ -270,6 +270,56 @@ html.theme-switching *::after {
 }
 
 /* ═══════════════════════════════════════════
+   SHINY TEXT & GREETING ANIMATIONS
+═══════════════════════════════════════════ */
+
+@keyframes shimmer {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+@keyframes greeting-in {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ── Shiny name highlight color — overridden per theme mode ── */
+:root {
+  /* Light themes: 85% white + 15% primary = vivid-but-light tint, visible on white bg */
+  --shiny-highlight: color-mix(in srgb, var(--primary) 15%, white);
+  --shiny-glow-strength: 60%;
+}
+html.dark {
+  /* Dark themes: pure white flash — maximum contrast against dark bg */
+  --shiny-highlight: white;
+  --shiny-glow-strength: 80%;
+}
+
+/* Single rule — gradient uses the variable so background-size is never reset */
+.shiny-name {
+  background: linear-gradient(
+    90deg,
+    var(--primary) 0%,
+    var(--primary) 30%,
+    var(--shiny-highlight) 50%,
+    var(--primary) 70%,
+    var(--primary) 100%
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--primary) var(--shiny-glow-strength), transparent));
+}
+
+/* Greeting heading entrance animation */
+.greeting-animate {
+  animation: greeting-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ═══════════════════════════════════════════
    UTILITY CLASSES
 ═══════════════════════════════════════════ */
 
@@ -317,4 +367,5 @@ html.theme-switching *::after {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
+  border-radius: 3px;
 }

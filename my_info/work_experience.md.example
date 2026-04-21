@@ -1,0 +1,56 @@
+# Work Experience
+
+<!-- ============================================================
+INSTRUCTIONS
+============================================================
+This file is read by the AI resume tailoring agent to enrich
+your resume with details not visible in the YAML itself.
+
+Write detailed descriptions of your work -- more detail is better.
+The agent picks the most relevant bullets for each specific job.
+
+Format: plain Markdown. Use headings for each role, bullets
+for individual achievements. Include technologies, metrics,
+team sizes, and business impact wherever possible.
+
+Rename this file to work_experience.md when you are ready.
+============================================================ -->
+
+## Senior Software Engineer -- Acme Corporation (Mar 2022 -- Present)
+
+**Team:** Platform Engineering, 8 engineers
+**Tech:** Python, FastAPI, TypeScript, React, PostgreSQL, AWS, Kafka, Redis, Terraform
+
+Key responsibilities and achievements:
+
+- Led the migration of the monolithic payment service to microservices architecture
+  - Reduced p99 latency from 800ms to 480ms on 2M+ daily transactions
+  - Zero downtime cutover using strangler-fig pattern over 6 months
+- Designed and built the real-time fraud detection pipeline
+  - Kafka consumer processing 50K events/sec, Redis for real-time feature lookups
+  - Cut false-positive rate from 12% to 7.8%, saving $400K/year in manual review costs
+- Shipped a GraphQL + REST hybrid API used by 150+ enterprise clients
+  - Owned API versioning strategy and backwards-compatibility guarantees
+  - P99 < 120ms at peak load (30K req/s)
+- Ran weekly code reviews and architecture discussions for junior engineers (3 reports)
+- Introduced contract testing (Pact) across 12 microservices, catching 4 production regressions pre-release
+
+---
+
+## Software Engineer -- Beta Startup (Jun 2019 -- Feb 2022)
+
+**Team:** ML Platform, 5 engineers
+**Tech:** Python, FastAPI, Airflow, dbt, PostgreSQL, AWS SageMaker, Docker, Kubernetes
+
+Key responsibilities and achievements:
+
+- Built the ML inference engine from scratch -- served 500K predictions/day at 99.9% uptime
+  - FastAPI + Celery + Redis; horizontally scaled on EKS
+  - Introduced model quantisation (INT8) -- reduced inference cost by 60%
+  - Added batched inference -- increased throughput 8x at same hardware cost
+- Designed and maintained the data ingestion pipeline processing 10TB/day
+  - Airflow DAGs pulling from 20+ data sources (REST APIs, S3, Snowflake, Kafka)
+  - dbt models for data transformation with 97% test coverage
+- Owned the A/B testing framework used by 5 product teams
+  - Enabled statistical significance calculations with Bayesian + frequentist modes
+- Mentored 2 data science interns; both converted to full-time roles

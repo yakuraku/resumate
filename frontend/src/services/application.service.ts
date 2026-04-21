@@ -55,9 +55,10 @@ export const ApplicationService = {
     return response.data;
   },
 
-  // Delete an application
-  delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/applications/${id}`);
+  // Delete an application. Returns the name of the saved template if a tailored resume was preserved.
+  delete: async (id: string): Promise<{ saved_template_name: string | null }> => {
+    const response = await apiClient.delete<{ saved_template_name: string | null }>(`/applications/${id}`);
+    return response.data;
   },
 
   // Analyze the job description for keywords and match score
@@ -75,6 +76,12 @@ export const ApplicationService = {
   // Update application resume template (PUT /applications/{id}/resume-template)
   updateResumeTemplate: async (id: string, resume_template_id: string): Promise<ApplicationResponse> => {
     const response = await apiClient.put<ApplicationResponse>(`/applications/${id}/resume-template`, { resume_template_id });
+    return response.data;
+  },
+
+  // Update color for an application and all apps at the same company
+  updateColor: async (id: string, color: string | null): Promise<ApplicationResponse> => {
+    const response = await apiClient.patch<ApplicationResponse>(`/applications/${id}/color`, { color });
     return response.data;
   },
 };

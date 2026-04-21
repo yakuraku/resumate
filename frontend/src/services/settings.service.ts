@@ -10,6 +10,16 @@ export interface AppSettings {
   theme: string;
   default_master_resume_path: string;
   autosave_enabled: boolean;
+  tailor_mode?: string;
+  bg_animation_enabled: boolean;
+  bg_animation_type: string;
+  ghost_auto_enabled: boolean;
+  ghost_applied_days: number;
+  ghost_screening_days: number;
+  ghost_interviewing_days: number;
+  save_pdf_folder_enabled: boolean;
+  save_pdf_folder_path: string;
+  preferred_name: string;
 }
 
 export interface SettingsUpdate {
@@ -22,6 +32,16 @@ export interface SettingsUpdate {
   theme?: string;
   default_master_resume_path?: string;
   autosave_enabled?: boolean;
+  tailor_mode?: string;
+  bg_animation_enabled?: boolean;
+  bg_animation_type?: string;
+  ghost_auto_enabled?: boolean;
+  ghost_applied_days?: number;
+  ghost_screening_days?: number;
+  ghost_interviewing_days?: number;
+  save_pdf_folder_enabled?: boolean;
+  save_pdf_folder_path?: string;
+  preferred_name?: string;
 }
 
 export interface PromptInfo {

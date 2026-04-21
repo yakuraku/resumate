@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogTrigger
 } from "@/components/ui/dialog"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -19,6 +19,8 @@ import { ApplicationStatus } from "@/types/application"
 import { Plus, Loader2 } from "lucide-react"
 import { ResumeTemplateService } from "@/services/resume-template.service"
 import type { ResumeTemplate } from "@/types/resume-template"
+import { ColorPicker, PRESET_COLORS, randomPresetColor } from "@/components/shared/ColorPicker"
+import { getContrastColor } from "@/lib/utils"
 
 interface CreateApplicationModalProps {
   onSuccess?: () => void
@@ -32,6 +34,10 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
   const [templates, setTemplates] = useState<ResumeTemplate[]>([])
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("")
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [selectedColor, setSelectedColor] = useState<string>(randomPresetColor())
+  const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  const colorPickerRef = useRef<HTMLDivElement>(null)
+  const nativeColorPickerActive = useRef(false)
 
   const [formData, setFormData] = useState({
     company: "",
@@ -44,6 +50,8 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
 
   useEffect(() => {
     if (!open) return
+    // Pick a fresh random color each time the modal opens
+    setSelectedColor(randomPresetColor())
     setLoadingTemplates(true)
     ResumeTemplateService.getAll()
       .then(data => {
@@ -54,6 +62,20 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
       .catch(e => console.error("Could not load templates", e))
       .finally(() => setLoadingTemplates(false))
   }, [open])
+
+  // Close color picker when clicking outside
+  useEffect(() => {
+    if (!colorPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      // Suppress while the native OS color dialog is active
+      if (nativeColorPickerActive.current) return
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setColorPickerOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [colorPickerOpen])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -69,12 +91,13 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
       const response = await ApplicationService.create({
         company: formData.company,
         role: formData.role,
-        status: ApplicationStatus.DRAFT, // Default status
+        status: ApplicationStatus.DRAFT,
         location: formData.location || undefined,
         source_url: formData.source_url || undefined,
         job_description: formData.job_description || undefined,
         notes: formData.notes || undefined,
-        applied_date: new Date().toISOString().split('T')[0] // Default to today
+        applied_date: new Date().toISOString().split('T')[0],
+        color: selectedColor,
       })
 
       // Link the selected template if one is chosen
@@ -87,7 +110,6 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
       }
 
       setOpen(false)
-      // Reset form
       setFormData({
         company: "",
         role: "",
@@ -102,7 +124,6 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
         onSuccess()
       }
 
-      // Redirect to the application workspace
       window.location.href = `/applications/${response.id}`;
     } catch (err) {
       setError("Failed to create application. Please try again.")
@@ -122,7 +143,12 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto"
+        style={{
+          background: `color-mix(in srgb, ${selectedColor} 10%, var(--background))`,
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Add New Application</DialogTitle>
           <DialogDescription>
@@ -161,6 +187,41 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
             </div>
           </div>
 
+          {/* Colour picker */}
+          <div className="grid gap-2">
+            <Label>Application Colour</Label>
+            <div className="relative" ref={colorPickerRef}>
+              <button
+                type="button"
+                onClick={() => setColorPickerOpen(v => !v)}
+                className="flex items-center gap-3 h-9 w-full rounded-md border border-input bg-background/60 px-3 py-1 text-sm hover:bg-muted/40 transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                <span
+                  className="size-4 rounded-sm flex-shrink-0"
+                  style={{ backgroundColor: selectedColor }}
+                />
+                <span className="text-muted-foreground">
+                  {PRESET_COLORS.includes(selectedColor) ? selectedColor : selectedColor}
+                </span>
+                <span className="ml-auto text-muted-foreground text-xs">click to change</span>
+              </button>
+              {colorPickerOpen && (
+                <div className="absolute top-full left-0 mt-1 z-50">
+                  <ColorPicker
+                    value={selectedColor}
+                    onChange={(c) => { setSelectedColor(c); setColorPickerOpen(false); }}
+                    onNativePickerActiveChange={(active) => {
+                      nativeColorPickerActive.current = active;
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Used to identify this company across all your applications.
+            </p>
+          </div>
+
           <div className="grid gap-2">
             <Label htmlFor="template">Starting Resume</Label>
             {loadingTemplates ? (
@@ -174,9 +235,15 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
                 onChange={e => setSelectedTemplateId(e.target.value)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                {templates.map(t => (
+                {templates.filter(t => t.is_master).map(t => (
                   <option key={t.id} value={t.id}>
-                    {t.name}{t.is_master ? " (Master)" : ""}{t.is_starred ? " ⭐" : ""}
+                    {t.name} (Master){t.is_starred ? " ⭐" : ""}
+                  </option>
+                ))}
+                <option value="">— Choose Later —</option>
+                {templates.filter(t => !t.is_master).map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.is_starred ? " ⭐" : ""}
                   </option>
                 ))}
               </select>
@@ -234,10 +301,23 @@ export function CreateApplicationModal({ onSuccess, trigger }: CreateApplication
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => {
+              setOpen(false)
+              setFormData({ company: "", role: "", location: "", source_url: "", job_description: "", notes: "" })
+              setSelectedTemplateId("")
+              setError(null)
+            }}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button
+              type="submit"
+              disabled={loading}
+              style={{
+                backgroundColor: selectedColor,
+                borderColor: selectedColor,
+                color: getContrastColor(selectedColor),
+              }}
+            >
               {loading ? "Creating..." : "Create Application"}
             </Button>
           </DialogFooter>

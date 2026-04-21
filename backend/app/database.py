@@ -5,10 +5,17 @@ from app.config import settings
 # check_same_thread: False is needed for SQLite, but only for SQLite
 connect_args = {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 
+_is_postgres = "sqlite" not in settings.DATABASE_URL
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
-    connect_args=connect_args
+    connect_args=connect_args,
+    **({
+        "pool_size": 5,
+        "max_overflow": 10,
+        "pool_recycle": 1800,
+        "pool_pre_ping": True,
+    } if _is_postgres else {})
 )
 
 SessionLocal = async_sessionmaker(

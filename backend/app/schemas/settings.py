@@ -23,10 +23,24 @@ class SettingsResponse(BaseModel):
     llm_api_key_openai: str = ""
     llm_api_key_openrouter: str = ""
     llm_api_key_gemini: str = ""
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-5-mini"
     theme: str = "dark"
     default_master_resume_path: str = "master-resume_CV.yaml"
     autosave_enabled: bool = True
+    tailor_mode: str = "agentic"
+    bg_animation_enabled: bool = True
+    bg_animation_type: str = "particles"
+    ghost_auto_enabled: bool = True
+    ghost_applied_days: int = 21
+    ghost_screening_days: int = 21
+    ghost_interviewing_days: int = 60
+    # PDF saving
+    save_pdf_folder_enabled: bool = False
+    save_pdf_folder_path: str = ""
+    # Onboarding
+    wizard_dismissed: bool = False
+    # Profile
+    preferred_name: str = ""
 
 
 class LLMTestRequest(BaseModel):
@@ -51,6 +65,17 @@ class SettingsUpdate(BaseModel):
     theme: Optional[str] = None
     default_master_resume_path: Optional[str] = None
     autosave_enabled: Optional[bool] = None
+    tailor_mode: Optional[str] = None
+    bg_animation_enabled: Optional[bool] = None
+    bg_animation_type: Optional[str] = None
+    ghost_auto_enabled: Optional[bool] = None
+    ghost_applied_days: Optional[int] = None
+    ghost_screening_days: Optional[int] = None
+    ghost_interviewing_days: Optional[int] = None
+    save_pdf_folder_enabled: Optional[bool] = None
+    save_pdf_folder_path: Optional[str] = None
+    wizard_dismissed: Optional[bool] = None
+    preferred_name: Optional[str] = None
     custom_prompt_resume_tailoring: Optional[str] = None
     custom_prompt_qa_generate: Optional[str] = None
     custom_prompt_qa_rewrite: Optional[str] = None

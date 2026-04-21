@@ -15,14 +15,20 @@ const PIPELINE_SEGMENTS = [
     {
         status: ApplicationStatus.DRAFT,
         label: "Draft",
-        dotColor: "bg-slate-400",
-        countColor: "text-foreground",
+        dotColor: "bg-emerald-400",
+        countColor: "text-emerald-400",
     },
     {
         status: ApplicationStatus.APPLIED,
         label: "Applied",
         dotColor: "bg-blue-400",
-        countColor: "text-foreground",
+        countColor: "text-blue-400",
+    },
+    {
+        status: ApplicationStatus.SCREENING,
+        label: "Screening",
+        dotColor: "bg-amber-400",
+        countColor: "text-amber-400",
     },
     {
         status: ApplicationStatus.INTERVIEWING,
@@ -31,16 +37,16 @@ const PIPELINE_SEGMENTS = [
         countColor: "text-primary",
     },
     {
-        status: ApplicationStatus.OFFER,
-        label: "Offer",
-        dotColor: "bg-emerald-400",
-        countColor: "text-emerald-400",
-    },
-    {
         status: ApplicationStatus.REJECTED,
         label: "Rejected",
         dotColor: "bg-red-400",
-        countColor: "text-foreground",
+        countColor: "text-red-400",
+    },
+    {
+        status: ApplicationStatus.GHOSTED,
+        label: "Ghosted",
+        dotColor: "bg-gray-400",
+        countColor: "text-muted-foreground",
     },
 ];
 

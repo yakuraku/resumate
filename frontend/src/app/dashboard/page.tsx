@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useEffect } from "react";
-import { Search, Trash2, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { Search, FileText, Plus, ArrowUpDown, LayoutDashboard, ScrollText, Settings, User, Pencil, X, Loader2, MoreHorizontal, Trash2 } from "lucide-react";
 import { ApplicationService } from "@/services/application.service";
+import { SettingsService } from "@/services/settings.service";
 import { CreateApplicationModal } from "@/components/applications/CreateApplicationModal";
+import { DeleteApplicationModal } from "@/components/applications/DeleteApplicationModal";
 import { ApplicationResponse, ApplicationStatus } from "@/types/application";
 import { SkeletonTable } from "@/components/shared/Skeletons";
 import { useDashboardData } from "@/hooks/useDashboardData";
@@ -17,7 +19,8 @@ import { TodaysFocus } from "@/components/dashboard/TodaysFocus";
 import { AchievementsBadges } from "@/components/dashboard/AchievementsBadges";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { ThemeSelector } from "@/components/ThemeSelector";
-import { cn } from "@/lib/utils";
+import { DashboardBackground } from "@/components/dashboard/DashboardBackground";
+import { cn, getContrastColor } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -25,8 +28,8 @@ type SortOption = "date_desc" | "date_asc" | "company_asc" | "company_desc" | "s
 
 const ALL_STATUSES = [
     ApplicationStatus.APPLIED,
+    ApplicationStatus.SCREENING,
     ApplicationStatus.INTERVIEWING,
-    ApplicationStatus.OFFER,
     ApplicationStatus.REJECTED,
     ApplicationStatus.GHOSTED,
     ApplicationStatus.DRAFT,
@@ -42,6 +45,7 @@ const SORT_LABELS: Record<SortOption, string> = {
 
 const STATUS_DOT_COLORS: Record<ApplicationStatus, string> = {
     [ApplicationStatus.APPLIED]: "bg-blue-400",
+    [ApplicationStatus.SCREENING]: "bg-amber-400",
     [ApplicationStatus.INTERVIEWING]: "bg-violet-400",
     [ApplicationStatus.OFFER]: "bg-emerald-400",
     [ApplicationStatus.REJECTED]: "bg-red-400",
@@ -49,27 +53,22 @@ const STATUS_DOT_COLORS: Record<ApplicationStatus, string> = {
     [ApplicationStatus.DRAFT]: "bg-slate-400",
 };
 
-const getAvatarGradient = (status: ApplicationStatus) => {
-    switch (status) {
-        case ApplicationStatus.APPLIED:
-            return "bg-gradient-to-br from-blue-500 to-blue-600";
-        case ApplicationStatus.INTERVIEWING:
-            return "bg-gradient-to-br from-violet-500 to-violet-600";
-        case ApplicationStatus.OFFER:
-            return "bg-gradient-to-br from-emerald-500 to-emerald-600";
-        case ApplicationStatus.REJECTED:
-            return "bg-gradient-to-br from-red-400 to-red-500";
-        case ApplicationStatus.GHOSTED:
-            return "bg-gradient-to-br from-gray-400 to-gray-500";
-        default:
-            return "bg-gradient-to-br from-slate-400 to-slate-500";
-    }
-};
+const FALLBACK_COLORS = ["#3b82f6","#8b5cf6","#22c55e","#f97316","#ec4899","#06b6d4"];
+function hashFallbackColor(name: string): string {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
+    return FALLBACK_COLORS[Math.abs(h) % FALLBACK_COLORS.length];
+}
+function getAppColor(app: { color?: string | null; company: string }): string {
+    return app.color || hashFallbackColor(app.company);
+}
 
 const getStatusColor = (status: ApplicationStatus) => {
     switch (status) {
         case ApplicationStatus.APPLIED:
             return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800";
+        case ApplicationStatus.SCREENING:
+            return "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800";
         case ApplicationStatus.INTERVIEWING:
             return "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800";
         case ApplicationStatus.OFFER:
@@ -86,6 +85,7 @@ const getStatusColor = (status: ApplicationStatus) => {
 const getStatusDotColor = (status: ApplicationStatus) => {
     switch (status) {
         case ApplicationStatus.APPLIED: return "bg-blue-500";
+        case ApplicationStatus.SCREENING: return "bg-amber-500";
         case ApplicationStatus.INTERVIEWING: return "bg-purple-500";
         case ApplicationStatus.OFFER: return "bg-green-500";
         case ApplicationStatus.REJECTED: return "bg-red-500";
@@ -99,6 +99,11 @@ export default function DashboardPage() {
     const [mounted, setMounted] = useState(false);
 
     const { applications, isLoading, refetch } = useDashboardData();
+    const [preferredName, setPreferredName] = useState("");
+
+    useEffect(() => {
+        SettingsService.get().then((s) => setPreferredName(s.preferred_name ?? "")).catch(() => {});
+    }, []);
 
     const [searchQuery, setSearchQuery] = useState("");
     const [sortOpen, setSortOpen] = useState(false);
@@ -115,14 +120,68 @@ export default function DashboardPage() {
         return () => document.removeEventListener("click", handler);
     }, []);
 
-    const handleDelete = async (id: string) => {
-        if (confirm("Are you sure you want to delete this application?")) {
-            try {
-                await ApplicationService.delete(id);
-                refetch();
-            } catch (error) {
-                console.error("Failed to delete application:", error);
+    // Toast
+    const [toasts, setToasts] = useState<Array<{ id: string; message: string; variant: "default" | "error" }>>([]);
+    const showToast = (message: string, variant: "default" | "error" = "default") => {
+        const id = Math.random().toString(36).slice(2);
+        setToasts((t) => [...t, { id, message, variant }]);
+        setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+    };
+
+    // Delete modal
+    const [deletingApp, setDeletingApp] = useState<ApplicationResponse | null>(null);
+    const [editDropdownOpen, setEditDropdownOpen] = useState<string | null>(null);
+    const editDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (editDropdownRef.current && !editDropdownRef.current.contains(e.target as Node)) {
+                setEditDropdownOpen(null);
             }
+        };
+        if (editDropdownOpen) document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [editDropdownOpen]);
+
+    const handleDeleteConfirm = async () => {
+        if (!deletingApp) return;
+        const result = await ApplicationService.delete(deletingApp.id);
+        setDeletingApp(null);
+        refetch();
+        if (result.saved_template_name) {
+            showToast(`Application deleted. Tailored resume saved as "${result.saved_template_name}" in Resume Templates.`);
+        } else {
+            showToast("Application deleted successfully.");
+        }
+    };
+
+    // Rename state
+    const [renamingApp, setRenamingApp] = useState<ApplicationResponse | null>(null);
+    const [renameRole, setRenameRole] = useState("");
+    const [renameCompany, setRenameCompany] = useState("");
+    const [savingRename, setSavingRename] = useState(false);
+
+    const openRenameModal = (app: ApplicationResponse, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setRenamingApp(app);
+        setRenameRole(app.role);
+        setRenameCompany(app.company);
+    };
+
+    const handleRename = async () => {
+        if (!renamingApp) return;
+        const trimmedRole = renameRole.trim();
+        const trimmedCompany = renameCompany.trim();
+        if (!trimmedRole || !trimmedCompany) return;
+        setSavingRename(true);
+        try {
+            await ApplicationService.update(renamingApp.id, { role: trimmedRole, company: trimmedCompany });
+            setRenamingApp(null);
+            refetch();
+        } catch (error) {
+            console.error("Failed to rename application:", error);
+        } finally {
+            setSavingRename(false);
         }
     };
 
@@ -198,8 +257,8 @@ export default function DashboardPage() {
 
     return (
         <div className="relative min-h-screen bg-background antialiased">
-            {/* Dot grid background texture */}
-            <div className="dot-grid fixed inset-0 pointer-events-none opacity-40" aria-hidden="true" />
+            {/* Background animation — type and enabled state from localStorage */}
+            <DashboardBackground />
 
             {/* ── Header ── */}
             <header className="sticky top-0 z-50 w-full border-b border-border bg-background/85 backdrop-blur-md">
@@ -256,7 +315,7 @@ export default function DashboardPage() {
             <main className="relative z-10 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
                 {/* Row 1: Greeting */}
-                <DashboardGreeting applications={applications} />
+                <DashboardGreeting applications={applications} name={preferredName || undefined} />
 
                 {/* Row 2: Stats + Heatmap */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -468,10 +527,13 @@ export default function DashboardPage() {
                                         >
                                             <td className="px-6 py-3.5">
                                                 <div className="flex items-center gap-3">
-                                                    <div className={cn(
-                                                        "flex h-8 w-8 flex-none items-center justify-center rounded-lg text-white font-bold text-xs shadow-sm",
-                                                        getAvatarGradient(app.status as ApplicationStatus)
-                                                    )}>
+                                                    <div
+                                                        className="flex h-8 w-8 flex-none items-center justify-center rounded-lg font-bold text-xs shadow-sm"
+                                                        style={{
+                                                            backgroundColor: getAppColor(app),
+                                                            color: getContrastColor(getAppColor(app)),
+                                                        }}
+                                                    >
                                                         {app.company.charAt(0).toUpperCase()}
                                                     </div>
                                                     <div>
@@ -502,14 +564,49 @@ export default function DashboardPage() {
                                                 {app.location || <span className="text-muted-foreground/40 italic text-xs">Not specified</span>}
                                             </td>
                                             <td className="px-6 py-3.5 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div
+                                                    className="relative flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    ref={editDropdownOpen === app.id ? editDropdownRef : undefined}
+                                                >
                                                     <button
-                                                        onClick={(e) => { e.stopPropagation(); handleDelete(app.id); }}
-                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                                                        title="Delete"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditDropdownOpen(editDropdownOpen === app.id ? null : app.id);
+                                                        }}
+                                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                                                        title="Edit"
                                                     >
-                                                        <Trash2 size={14} />
+                                                        <MoreHorizontal size={14} />
                                                     </button>
+                                                    {editDropdownOpen === app.id && (
+                                                        <div
+                                                            className="absolute right-0 top-full mt-1 z-30 w-40 rounded-lg border border-border bg-card shadow-lg py-1"
+                                                            onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    setEditDropdownOpen(null);
+                                                                    openRenameModal(app, e);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-foreground hover:bg-muted transition-colors"
+                                                            >
+                                                                <Pencil size={13} />
+                                                                Edit Details
+                                                            </button>
+                                                            <div className="my-1 border-t border-border" />
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEditDropdownOpen(null);
+                                                                    setDeletingApp(app);
+                                                                }}
+                                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10 transition-colors"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -558,6 +655,99 @@ export default function DashboardPage() {
                     </div>
                 </div>
             </main>
+
+            {/* Delete Modal */}
+            {deletingApp && (
+                <DeleteApplicationModal
+                    open={true}
+                    onClose={() => setDeletingApp(null)}
+                    onConfirm={handleDeleteConfirm}
+                    application={deletingApp}
+                />
+            )}
+
+            {/* Toasts */}
+            <div className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
+                {toasts.map((t) => (
+                    <div
+                        key={t.id}
+                        className={[
+                            "px-4 py-3 rounded-lg border shadow-lg text-sm max-w-sm pointer-events-auto",
+                            t.variant === "error"
+                                ? "bg-red-900/90 border-red-700 text-red-100"
+                                : "bg-card border-border text-foreground",
+                        ].join(" ")}
+                    >
+                        {t.message}
+                    </div>
+                ))}
+            </div>
+
+            {/* Rename Modal */}
+            {renamingApp && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+                    onClick={() => !savingRename && setRenamingApp(null)}
+                >
+                    <div
+                        className="w-full max-w-sm rounded-xl border border-border bg-card shadow-xl p-6 space-y-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-base font-semibold text-foreground">Rename Application</h2>
+                            <button
+                                onClick={() => setRenamingApp(null)}
+                                disabled={savingRename}
+                                className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
+                            >
+                                <X size={16} />
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Role / Job Title</label>
+                                <input
+                                    autoFocus
+                                    value={renameRole}
+                                    onChange={(e) => setRenameRole(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenamingApp(null); }}
+                                    className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-primary/50 transition-colors"
+                                    placeholder="e.g. Senior Software Engineer"
+                                    disabled={savingRename}
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Company</label>
+                                <input
+                                    value={renameCompany}
+                                    onChange={(e) => setRenameCompany(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenamingApp(null); }}
+                                    className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-primary/50 transition-colors"
+                                    placeholder="e.g. Acme Corp"
+                                    disabled={savingRename}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                            <button
+                                onClick={() => setRenamingApp(null)}
+                                disabled={savingRename}
+                                className="px-3 py-1.5 text-sm rounded-lg text-muted-foreground hover:bg-muted transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleRename}
+                                disabled={savingRename || !renameRole.trim() || !renameCompany.trim()}
+                                className="px-3 py-1.5 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                            >
+                                {savingRename && <Loader2 size={13} className="animate-spin" />}
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

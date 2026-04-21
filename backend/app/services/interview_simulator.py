@@ -13,9 +13,10 @@ from app.services.prompts import (
 from app.services.interview_service import InterviewService
 
 class InterviewSimulator:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, user_id: str):
         self.db = db
-        self.interview_service = InterviewService(db)
+        self.user_id = user_id
+        self.interview_service = InterviewService(db, user_id)
 
     async def process_answer(self, answer_id: str):
         """

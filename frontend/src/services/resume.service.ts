@@ -2,6 +2,10 @@
 import { apiClient } from '@/lib/axios';
 import { Resume, ResumeUpdate, ResumeVersion } from '@/types/resume';
 
+export type SavePdfResult =
+    | { mode: 'folder'; savedTo: string }
+    | { mode: 'download'; blob: Blob; filename: string };
+
 export const ResumeService = {
     getAll: async (): Promise<Resume[]> => {
         const response = await apiClient.get<Resume[]>('/resumes');
@@ -69,5 +73,46 @@ export const ResumeService = {
             params: { t: Date.now() },
         });
         return new Blob([response.data], { type: 'application/pdf' });
+    },
+
+    /**
+     * Save PDF -- behavior depends on the user's "Save to Folder" setting:
+     *
+     * Folder mode (setting enabled + path configured on the server):
+     *   The server saves the file and returns JSON { mode: "folder", saved_to: "..." }.
+     *   A 409 is raised when the file already exists and force=false.
+     *
+     * Download mode (default):
+     *   The server returns the PDF as application/pdf with attachment disposition.
+     *   The browser download is triggered by the caller using the returned blob.
+     */
+    savePdf: async (
+        resumeId: string,
+        companyName: string,
+        filename: string,
+        force = false
+    ): Promise<SavePdfResult> => {
+        const response = await apiClient.post(
+            `/resumes/${resumeId}/save-to-disk`,
+            { company_name: companyName, filename, force },
+            { responseType: 'blob' }
+        );
+
+        const contentType: string = response.headers['content-type'] ?? '';
+
+        if (contentType.includes('application/json')) {
+            // Folder-save mode: parse JSON from blob
+            const text = await (response.data as Blob).text();
+            const data = JSON.parse(text) as { mode: string; saved_to: string };
+            return { mode: 'folder', savedTo: data.saved_to };
+        }
+
+        // Download mode: return blob to caller for browser download
+        const blob = new Blob([response.data as BlobPart], { type: 'application/pdf' });
+        return { mode: 'download', blob, filename };
+    },
+
+    deleteVersion: async (resumeId: string, versionId: string): Promise<void> => {
+        await apiClient.delete(`/resumes/${resumeId}/versions/${versionId}`);
     },
 };
