@@ -30,9 +30,36 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
+_INSECURE_DEFAULTS = {"dev-insecure-change-me", "change-me", ""}
+
+
+def _validate_cloud_secrets() -> None:
+    """Abort startup if any critical secret is still using an insecure default in cloud mode."""
+    if settings.AUTH_MODE != "cloud":
+        return
+    errors: list[str] = []
+    if settings.JWT_SECRET_KEY in _INSECURE_DEFAULTS:
+        errors.append("JWT_SECRET_KEY is not set or is using the insecure default value")
+    if settings.CSRF_SECRET_KEY in _INSECURE_DEFAULTS:
+        errors.append("CSRF_SECRET_KEY is not set or is using the insecure default value")
+    if not settings.ENCRYPTION_KEY:
+        errors.append("ENCRYPTION_KEY is not set -- user API keys cannot be stored securely")
+    if errors:
+        lines = "\n  - ".join(errors)
+        raise RuntimeError(
+            f"\n\n{'='*70}\n"
+            "[STARTUP ABORTED] Insecure configuration detected in cloud mode:\n"
+            f"  - {lines}\n\n"
+            "Set these environment variables in your Render dashboard before deploying.\n"
+            f"{'='*70}\n"
+        )
+
+
 def _startup_checks() -> None:
     """Run synchronous file-system checks and initialization at startup."""
     from app.config import settings as _s
+    # Validate secrets before anything else in cloud mode.
+    _validate_cloud_secrets()
     # Cloud mode: all content lives in Postgres/R2 -- no local filesystem to check.
     if _s.STORAGE_BACKEND == "r2":
         return
@@ -244,14 +271,16 @@ async def lifespan(app: FastAPI):
         pass
 
 
+_is_cloud = settings.AUTH_MODE == "cloud"
+
 app = FastAPI(
     lifespan=lifespan,
     title="ResuMate Career OS API",
     description="Backend API for ResuMate Career OS",
     version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None if _is_cloud else "/docs",
+    redoc_url=None if _is_cloud else "/redoc",
+    openapi_url=None if _is_cloud else "/openapi.json",
 )
 
 # CORS Middleware.
