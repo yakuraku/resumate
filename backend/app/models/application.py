@@ -25,8 +25,8 @@ class ApplicationStatus(str, Enum):
 class Application(BaseModel):
     __tablename__ = "applications"
 
-    user_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    user_id: Mapped[str] = mapped_column(
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     company: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(255), nullable=False)

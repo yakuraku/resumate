@@ -27,9 +27,17 @@ export default function Home() {
                     router.replace("/setup");
                 }
             })
-            .catch(() => {
-                // Backend not reachable yet -- send to setup as the safe default.
-                router.replace("/setup");
+            .catch((error) => {
+                // Network error (backend not reachable): send to /setup so the
+                // first-run wizard loads when the server comes up.
+                // HTTP error with a response (e.g. 500): the server is up but
+                // broken -- do NOT send to /setup (would look like a fresh install).
+                // Redirect to /login so the user can try again once the server recovers.
+                if (error?.response) {
+                    router.replace("/login");
+                } else {
+                    router.replace("/setup");
+                }
             });
     }, [router]);
 
