@@ -3,3 +3,10 @@
 3. NEVER use emdash anywhere.
 4. ALWAYS account for edge cases, Inform the user of any edge cases you find and how you plan to handle them. Only proceed after you get the user's approval.
 5. Use MCP wherever necessary like vercel, supabase, context7 depending on the requirement. For example, if you need to check the status of a deployment, use the vercel mcp. If you need to check the status of a database, use the supabase mcp. If you are working on something new that requires you to change or explore different frameworks or libraries, use the context7 mcp.
+6. Repo structure: This folder (C:\YASH\CODE\ResuMate) is the private dev repo with two remotes:
+  origin → github.com/yakuraku/resumate-dev (private, where all development happens) and public →    
+  github.com/yakuraku/resumate (public release repo). Both Vercel (frontend) and Render (backend)
+  auto-deploy from the public remote, so changes only go live after running git push public main --
+  pushing to origin alone does nothing on the live site. There is also a sibling folder
+  C:\YASH\CODE\ResuMate-docker connected to the same remotes, used as the clean Docker release       
+  version without personal data.
