@@ -12,18 +12,17 @@ Endpoints:
 
 import re
 import sys
-from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.utils.filesystem import get_data_dir
+from app.services.binary_storage_service import get_binary_storage
 
 router = APIRouter()
 
@@ -253,11 +252,13 @@ async def save_master_resume(
     if not valid:
         return ValidationResult(valid=False, error=error_msg)
 
-    # Render a preview PDF to the local temp dir, scoped per user to avoid race conditions.
-    preview_path = get_data_dir() / f"master-resume-preview-{current_user.id}.pdf"
-    render_ok, render_err = await rendercv_service.render_yaml_to_pdf(content, preview_path)
-    if not render_ok:
-        print(f"[Setup] Warning: preview PDF render failed after validation: {render_err[:200]}")
+    # Render preview PDF and store via the storage abstraction (R2 in cloud, local otherwise).
+    render_ok, render_payload = await rendercv_service.render_yaml_to_bytes(content)
+    if render_ok:
+        storage = get_binary_storage()
+        await storage.put(current_user.id, "pdfs/master-resume-preview.pdf", render_payload)  # type: ignore[arg-type]
+    else:
+        print(f"[Setup] Warning: preview PDF render failed after validation: {str(render_payload)[:200]}")
 
     # Persist YAML to DB (works in both local and cloud/R2 mode).
     from app.services import text_storage_service
@@ -269,14 +270,26 @@ async def save_master_resume(
 @router.get("/master-resume/pdf")
 async def get_master_resume_pdf(current_user: User = Depends(get_current_user)):
     """Serve the most recently rendered master resume preview PDF."""
-    preview_path = get_data_dir() / f"master-resume-preview-{current_user.id}.pdf"
-    if not preview_path.exists():
+    storage = get_binary_storage()
+    key = "pdfs/master-resume-preview.pdf"
+
+    if not await storage.exists(current_user.id, key):
         raise HTTPException(
             status_code=404,
-            detail="Preview PDF not yet generated. Validate your master resume first.",
+            detail="Preview PDF not yet generated. Save your master resume first.",
         )
+
+    # Cloud mode (R2): redirect to presigned URL.
+    presigned = await storage.url(current_user.id, key, expires_in=3600)
+    if presigned:
+        return RedirectResponse(url=presigned, status_code=302)
+
+    # Local mode: stream from disk.
+    output_path = storage.local_path(current_user.id, key)
+    if output_path is None or not output_path.exists():
+        raise HTTPException(status_code=404, detail="Preview PDF not found on disk.")
     return FileResponse(
-        path=str(preview_path),
+        path=str(output_path),
         media_type="application/pdf",
         headers={"Content-Disposition": "inline"},
     )
