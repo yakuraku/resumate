@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException
+from uuid import uuid4
 
 from app.models.resume import Resume, ResumeVersion, VersionSource
 from app.schemas.resume import ResumeUpdate
@@ -66,15 +67,19 @@ class ResumeService:
                         yaml_content = "cv:\n  name: Your Name\n"
                         print(f"Warning: Could not read master resume: {e}")
 
-        # IDs are Python-side defaults -- both objects can be added before the single commit
+        # Explicitly generate the ID so resume_id is available before the flush.
+        # SQLAlchemy's default= is an INSERT-time default, not a constructor default,
+        # so new_resume.id would be None if accessed before commit.
+        resume_id = str(uuid4())
         new_resume = Resume(
+            id=resume_id,
             application_id=application_id,
             cloned_from_id=clone_from_id,
             yaml_content=yaml_content,
             current_version=1,
         )
         first_version = ResumeVersion(
-            resume_id=new_resume.id,
+            resume_id=resume_id,
             version_number=1,
             yaml_content=yaml_content,
             change_summary="Initial creation",
