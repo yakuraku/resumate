@@ -16,8 +16,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
     Loader2, Eye, EyeOff, AlertTriangle, Save, Download,
     CheckCircle, Check, Plus, Trash2, RotateCcw, X, ChevronRight,
-    FileEdit, MessageSquarePlus, Sparkles, BookMarked, Zap, ExternalLink
+    FileEdit, MessageSquarePlus, Sparkles, BookMarked, Zap, ExternalLink, Bug
 } from "lucide-react";
+import * as Sentry from "@sentry/nextjs";
 import {
     Dialog,
     DialogContent,
@@ -113,6 +114,9 @@ export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState("general");
     const [highlightGlobalRules, setHighlightGlobalRules] = useState(false);
     const globalRulesRef = React.useRef<HTMLElement | null>(null);
+
+    const [sentryBackendStatus, setSentryBackendStatus] = useState<"idle" | "loading" | "sent" | "failed">("idle");
+    const [sentryFrontendStatus, setSentryFrontendStatus] = useState<"idle" | "sent">("idle");
 
     const handleGoToGlobalRules = useCallback(() => {
         setOpenPromptKey(null);
@@ -984,6 +988,73 @@ export default function SettingsPage() {
                                     <Button variant="outline" size="sm" className="gap-2" onClick={handleExportData}>
                                         <Download className="h-4 w-4" />
                                         Export
+                                    </Button>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Diagnostics */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Diagnostics</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">
+                                    Send test errors to Sentry to verify error tracking is connected.
+                                    Check the Sentry Issues dashboard after clicking.
+                                </p>
+                            </div>
+                            <div className="md:w-2/3 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Test Backend Error</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Triggers a deliberate Python exception on the server.</p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2 shrink-0"
+                                        disabled={sentryBackendStatus === "loading"}
+                                        onClick={async () => {
+                                            setSentryBackendStatus("loading");
+                                            try {
+                                                await fetch("/api/v1/debug/sentry-test");
+                                                setSentryBackendStatus("sent");
+                                            } catch {
+                                                setSentryBackendStatus("sent");
+                                            }
+                                            setTimeout(() => setSentryBackendStatus("idle"), 5000);
+                                        }}
+                                    >
+                                        {sentryBackendStatus === "loading" ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : sentryBackendStatus === "sent" ? (
+                                            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                        ) : (
+                                            <Bug className="h-3.5 w-3.5" />
+                                        )}
+                                        {sentryBackendStatus === "sent" ? "Sent!" : "Send Test Error"}
+                                    </Button>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Test Frontend Error</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Captures a test exception from the browser via Sentry.</p>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2 shrink-0"
+                                        onClick={() => {
+                                            Sentry.captureException(new Error("Frontend Sentry test -- intentional error to verify Sentry integration"));
+                                            setSentryFrontendStatus("sent");
+                                            setTimeout(() => setSentryFrontendStatus("idle"), 5000);
+                                        }}
+                                    >
+                                        {sentryFrontendStatus === "sent" ? (
+                                            <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                                        ) : (
+                                            <Bug className="h-3.5 w-3.5" />
+                                        )}
+                                        {sentryFrontendStatus === "sent" ? "Sent!" : "Send Test Error"}
                                     </Button>
                                 </div>
                             </div>
