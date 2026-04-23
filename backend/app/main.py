@@ -25,6 +25,7 @@ if settings.SENTRY_DSN:
         traces_sample_rate=0.1,
         send_default_pii=False,
     )
+    print(f"[Sentry] Initialized (env={('production' if settings.AUTH_MODE == 'cloud' else 'development')})")
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())

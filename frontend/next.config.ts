@@ -50,6 +50,7 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   org: "yakuraku",
   project: "resumate-frontend",
+  authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   tunnelRoute: "/monitoring",
   sourcemaps: {
