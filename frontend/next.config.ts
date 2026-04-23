@@ -52,7 +52,6 @@ export default withSentryConfig(nextConfig, {
   project: "resumate-frontend",
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
-  tunnelRoute: "/monitoring",
   sourcemaps: {
     deleteSourcemapsAfterUpload: true,
   },
