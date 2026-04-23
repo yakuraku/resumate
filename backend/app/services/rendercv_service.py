@@ -6,6 +6,31 @@ import sys
 import os
 from pathlib import Path
 
+
+# Fields that Codex / older tooling sometimes injects into design.page but that
+# are not part of the RenderCV 2.x schema. Stripped before every render so that
+# existing database rows don't cause validation failures.
+_INVALID_PAGE_FIELDS = {"show_last_updated_date"}
+
+
+def _sanitize_yaml(yaml_content: str) -> str:
+    """Strip known-invalid fields from YAML before passing to RenderCV."""
+    try:
+        import yaml as _yaml
+        data = _yaml.safe_load(yaml_content)
+        if isinstance(data, dict):
+            page = data.get("design", {}).get("page")
+            if isinstance(page, dict):
+                removed = [k for k in _INVALID_PAGE_FIELDS if k in page]
+                for k in removed:
+                    del page[k]
+                if removed:
+                    print(f"[RenderCV] Stripped invalid design.page fields: {removed}")
+        return _yaml.dump(data, allow_unicode=True, sort_keys=False)
+    except Exception:
+        return yaml_content
+
+
 def _strip_rendercv_preamble(output: str) -> str:
     """
     RenderCV 2.3 always prints a version-notice + welcome-banner to stdout before
@@ -34,11 +59,12 @@ class RenderCVService:
         Renders YAML content to PDF using RenderCV CLI via subprocess.
         Returns (Success, LogOutput).
         """
+        yaml_content = _sanitize_yaml(yaml_content)
         run_id = str(uuid.uuid4())
         # Use a temp directory inside the project to avoid permission issues
         temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"render_{run_id}"
         temp_dir.mkdir(parents=True, exist_ok=True)
-        
+
         yaml_file = temp_dir / "cv.yaml"
         log_output = ""
         
@@ -123,6 +149,7 @@ class RenderCVService:
         bytes and never touches a filesystem path.
         """
         import uuid, shutil, asyncio, subprocess, sys
+        yaml_content = _sanitize_yaml(yaml_content)
         run_id = str(uuid.uuid4())
         temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"render_{run_id}"
         temp_dir.mkdir(parents=True, exist_ok=True)
@@ -162,6 +189,7 @@ class RenderCVService:
         Uses sys.executable to ensure the same venv/rendercv version (2.3).
         """
         import uuid, shutil, asyncio, subprocess, sys
+        yaml_content = _sanitize_yaml(yaml_content)
         run_id = str(uuid.uuid4())
         temp_dir = Path(tempfile.gettempdir()) / "rendercv_renders" / f"validate_{run_id}"
         temp_dir.mkdir(parents=True, exist_ok=True)
