@@ -59,7 +59,7 @@ class ChatService {
     },
     signal?: AbortSignal,
   ): Promise<void> {
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8921/api/v1';
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
     const response = await fetch(`${apiBase}/chat/${chatId}/message/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
