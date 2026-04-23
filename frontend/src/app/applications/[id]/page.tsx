@@ -42,7 +42,7 @@ import { SavePdfButton } from "@/components/ui/SavePdfButton";
 import { AiTailorButton } from "@/components/ui/AiTailorButton";
 import { ColorPicker } from "@/components/shared/ColorPicker";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 
 interface PageProps {
     params: Promise<{ id: string }>;
@@ -539,7 +539,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         abortControllerRef.current = controller;
 
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8921/api/v1";
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
             const response = await fetch(`${apiBase}/resumes/${resume.id}/tailor/stream`, {
                 method: "POST",
                 signal: controller.signal,
