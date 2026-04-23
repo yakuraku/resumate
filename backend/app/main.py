@@ -317,6 +317,11 @@ async def health_check(db: AsyncSession = Depends(get_db)):
     }
 
 
+@app.get("/api/v1/debug/sentry-test")
+async def sentry_test_error():
+    raise ValueError("Sentry connectivity test -- intentional error to verify Sentry integration")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8921, reload=True)
