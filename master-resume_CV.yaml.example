@@ -106,6 +106,6 @@ cv:
 design:
   theme: classic
   page:
-    # `show_top_note: false` hides the "Last updated" line at the top of the PDF.
-    # RenderCV 2.x renames the old `show_last_updated_date` field to this.
-    show_top_note: false
+    # `show_last_updated_date: false` hides the "Last updated" line at the
+    # top of the PDF. Valid in RenderCV 2.3 (what this app is pinned to).
+    show_last_updated_date: false
