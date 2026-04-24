@@ -389,7 +389,7 @@ async def get_resume_pdf(
         ok, err = await _render_and_store(current_user.id, key, yaml_content)
         if not ok:
             print(f"[PDF] Render failed: {err[:200]}")
-            raise HTTPException(status_code=422, detail=f"RenderCV failed: {err[:500]}")
+            raise HTTPException(status_code=422, detail=f"RenderCV failed: {err[:1500]}")
         if target_version:
             await _record_pdf_render(db, target_version.id, key)
 
