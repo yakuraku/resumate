@@ -7,16 +7,25 @@ import os
 from pathlib import Path
 
 
-# design.page field translations applied before every render. The master YAML
-# template historically shipped with `show_last_updated_date`, which is NOT a
-# RenderCV 2.x field -- the actual toggle is `design.page.show_top_note`. We
-# translate so the UI toggle maps to the field RenderCV actually reads,
-# without touching stored YAML in Neon.
-_LEGACY_PAGE_FIELD_MAP = {"show_last_updated_date": "show_top_note"}
+# Fields under design.page that were valid in one RenderCV major version but
+# removed or renamed in another. We're pinned to 2.3 (see pyproject.toml), so
+# today this map is empty: `show_last_updated_date` is a valid 2.3 field and
+# passes through unchanged. If we ever upgrade to 2.4+, add mappings here --
+# 2.4 renamed `show_last_updated_date` to `show_top_note`, so that entry
+# would go back. Kept as a named extension point so future renames don't
+# require redesigning the sanitizer.
+_LEGACY_PAGE_FIELD_MAP: dict[str, str] = {}
 
 
 def _sanitize_yaml(yaml_content: str) -> str:
-    """Translate/strip known-invalid fields from YAML before passing to RenderCV."""
+    """Translate known-renamed fields before passing YAML to RenderCV.
+
+    Currently a near no-op for 2.3; the RenderCV subprocess is the source
+    of truth for validation. The translation path exists so future schema
+    drift across RenderCV versions is handled in one place.
+    """
+    if not _LEGACY_PAGE_FIELD_MAP:
+        return yaml_content
     try:
         import yaml as _yaml
         data = _yaml.safe_load(yaml_content)
@@ -37,40 +46,33 @@ def _sanitize_yaml(yaml_content: str) -> str:
         return yaml_content
 
 
-# Markers that signal the START of useful RenderCV output. Anything before
-# the earliest match is preamble noise (version-notice + welcome banner,
-# ~1100 chars) and must be stripped or the caller's truncation budget is
-# spent on the banner rather than the real error.
-_RENDERCV_CONTENT_MARKERS = (
-    "Validating the input file has started",
-    "There are validation errors",
-    "RenderCV couldn't render",
-    "Rendering the",
-)
-
-
 def _strip_rendercv_preamble(output: str) -> str:
     """
-    RenderCV always prints a version-notice + welcome banner before any real
-    step or error output. Find the earliest content marker and back up to the
-    box border (either `+---` legacy or `╭─` rich panel) that wraps it.
-    If no marker is found (unexpected format), return the original so we at
-    least surface something.
+    Strip RenderCV's welcome banner from the start of its output.
+
+    The banner structure is stable across all invocations:
+      - an optional "A new version of RenderCV is available!" notice
+      - a "Welcome to RenderCV!" line
+      - a rich "useful links" table, closed by a `└...┘` border
+
+    Everything after the table's closing border is real content -- a
+    validation table, a YAML parse error, a Typst compilation error, a
+    step-progress box, etc. Strip by structure (find the banner and
+    skip past it) rather than by matching every possible error phrase,
+    so new RenderCV error types don't silently regress this helper.
     """
-    earliest = -1
-    for marker in _RENDERCV_CONTENT_MARKERS:
-        idx = output.find(marker)
-        if idx != -1 and (earliest == -1 or idx < earliest):
-            earliest = idx
-    if earliest == -1:
+    welcome_idx = output.find("Welcome to RenderCV")
+    if welcome_idx == -1:
         return output
-    # Walk back to the opening box border preceding the marker. Handle both
-    # the legacy `+---` and the rich-panel `╭─` variants.
-    box_start = max(
-        output.rfind("+---", 0, earliest),
-        output.rfind("╭─", 0, earliest),
-    )
-    return output[box_start:] if box_start != -1 else output[earliest:]
+    # The banner always ends with the bottom-left corner `└` of the links
+    # table, followed by the row of horizontal bars and a `┘` closing.
+    corner_idx = output.find("└", welcome_idx)
+    if corner_idx == -1:
+        return output
+    newline_idx = output.find("\n", corner_idx)
+    if newline_idx == -1:
+        return output
+    return output[newline_idx + 1:].lstrip("\n")
 
 
 class RenderCVService:
