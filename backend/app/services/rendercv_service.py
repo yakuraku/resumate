@@ -7,47 +7,70 @@ import os
 from pathlib import Path
 
 
-# Fields that Codex / older tooling sometimes injects into design.page but that
-# are not part of the RenderCV 2.x schema. Stripped before every render so that
-# existing database rows don't cause validation failures.
-_INVALID_PAGE_FIELDS = {"show_last_updated_date"}
+# design.page field translations applied before every render. The master YAML
+# template historically shipped with `show_last_updated_date`, which is NOT a
+# RenderCV 2.x field -- the actual toggle is `design.page.show_top_note`. We
+# translate so the UI toggle maps to the field RenderCV actually reads,
+# without touching stored YAML in Neon.
+_LEGACY_PAGE_FIELD_MAP = {"show_last_updated_date": "show_top_note"}
 
 
 def _sanitize_yaml(yaml_content: str) -> str:
-    """Strip known-invalid fields from YAML before passing to RenderCV."""
+    """Translate/strip known-invalid fields from YAML before passing to RenderCV."""
     try:
         import yaml as _yaml
         data = _yaml.safe_load(yaml_content)
         if isinstance(data, dict):
             page = data.get("design", {}).get("page")
             if isinstance(page, dict):
-                removed = [k for k in _INVALID_PAGE_FIELDS if k in page]
-                for k in removed:
-                    del page[k]
-                if removed:
-                    print(f"[RenderCV] Stripped invalid design.page fields: {removed}")
+                translated: list[str] = []
+                for legacy, canonical in _LEGACY_PAGE_FIELD_MAP.items():
+                    if legacy in page:
+                        value = page.pop(legacy)
+                        # Don't overwrite an explicit user value on the canonical field.
+                        page.setdefault(canonical, value)
+                        translated.append(f"{legacy}->{canonical}")
+                if translated:
+                    print(f"[RenderCV] Translated legacy design.page fields: {translated}")
         return _yaml.dump(data, allow_unicode=True, sort_keys=False)
     except Exception:
         return yaml_content
 
 
+# Markers that signal the START of useful RenderCV output. Anything before
+# the earliest match is preamble noise (version-notice + welcome banner,
+# ~1100 chars) and must be stripped or the caller's truncation budget is
+# spent on the banner rather than the real error.
+_RENDERCV_CONTENT_MARKERS = (
+    "Validating the input file has started",
+    "There are validation errors",
+    "RenderCV couldn't render",
+    "Rendering the",
+)
+
+
 def _strip_rendercv_preamble(output: str) -> str:
     """
-    RenderCV 2.3 always prints a version-notice + welcome-banner to stdout before
-    any step output or error table. The useful content starts at the first step
-    box, which contains "Validating the input file has started".
-
-    Strategy: find that marker and back up to the +---+ box border that wraps it.
-    If the marker is absent (unexpected output format), return the original string
-    so we still surface something rather than nothing.
+    RenderCV always prints a version-notice + welcome banner before any real
+    step or error output. Find the earliest content marker and back up to the
+    box border (either `+---` legacy or `╭─` rich panel) that wraps it.
+    If no marker is found (unexpected format), return the original so we at
+    least surface something.
     """
-    marker = "Validating the input file has started"
-    idx = output.find(marker)
-    if idx == -1:
+    earliest = -1
+    for marker in _RENDERCV_CONTENT_MARKERS:
+        idx = output.find(marker)
+        if idx != -1 and (earliest == -1 or idx < earliest):
+            earliest = idx
+    if earliest == -1:
         return output
-    # Walk back to the opening +---+ border of the step box
-    box_start = output.rfind("+---", 0, idx)
-    return output[box_start:] if box_start != -1 else output[idx:]
+    # Walk back to the opening box border preceding the marker. Handle both
+    # the legacy `+---` and the rich-panel `╭─` variants.
+    box_start = max(
+        output.rfind("+---", 0, earliest),
+        output.rfind("╭─", 0, earliest),
+    )
+    return output[box_start:] if box_start != -1 else output[earliest:]
 
 
 class RenderCVService:
@@ -81,29 +104,35 @@ class RenderCVService:
             # Use to_thread to run blocking subprocess in a thread
             # This avoids asyncio.create_subprocess_exec/Windows SelectorEventLoop issues
             import asyncio
-            process = await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                cwd=str(temp_dir),
-                capture_output=True,
-                text=True,
-                encoding="utf-8"
-            )
-            
+            try:
+                process = await asyncio.to_thread(
+                    subprocess.run,
+                    cmd,
+                    cwd=str(temp_dir),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=90,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "RenderCV timed out after 90s"
+
             # subprocess.run returns a CompletedProcess object
             stdout_str = process.stdout or ""
             stderr_str = process.stderr or ""
-            
+
             # Log output to console for debugging
             print(f"[RenderCV] STDOUT: {stdout_str[:200]}...") # Log first 200 chars
             if stderr_str:
                 print(f"[RenderCV] STDERR: {stderr_str}")
 
-            log_output = f"STDOUT:\n{stdout_str}\n\nSTDERR:\n{stderr_str}"
-            
             if process.returncode != 0:
                 print(f"[RenderCV] Failed with exit code {process.returncode}")
-                return False, log_output
+                # Strip the ~1100-char version-notice + welcome banner that
+                # RenderCV always writes to stdout before any real output,
+                # so the caller's truncation budget goes to the actual error.
+                useful = _strip_rendercv_preamble(stdout_str) or stderr_str
+                return False, useful
                 
             # Find PDF in the output folder. 
             render_output = temp_dir / "rendercv_output"
@@ -157,17 +186,24 @@ class RenderCVService:
         try:
             yaml_file.write_text(yaml_content, encoding="utf-8")
             cmd = [sys.executable, "-m", "rendercv", "render", "cv.yaml"]
-            process = await asyncio.to_thread(
-                subprocess.run,
-                cmd,
-                cwd=str(temp_dir),
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-            )
+            try:
+                process = await asyncio.to_thread(
+                    subprocess.run,
+                    cmd,
+                    cwd=str(temp_dir),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=90,
+                )
+            except subprocess.TimeoutExpired:
+                return False, "RenderCV timed out after 90s"
             if process.returncode != 0:
-                log = f"STDOUT:\n{process.stdout or ''}\n\nSTDERR:\n{process.stderr or ''}"
-                return False, log
+                # Strip the preamble banner so the actionable error survives
+                # the caller's truncation budget.
+                stdout = _strip_rendercv_preamble(process.stdout or "")
+                stderr = (process.stderr or "").strip()
+                return False, stdout or stderr or f"RenderCV exited with code {process.returncode}"
             render_output = temp_dir / "rendercv_output"
             if not render_output.exists():
                 render_output = temp_dir
