@@ -540,8 +540,14 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
 
         try {
             const apiBase = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+            const { getCsrfToken } = await import("@/lib/csrf");
+            const csrfToken = await getCsrfToken();
+            const headers: Record<string, string> = { "Content-Type": "application/json" };
+            if (csrfToken) headers["X-CSRF-Token"] = csrfToken;
             const response = await fetch(`${apiBase}/resumes/${resume.id}/tailor/stream`, {
                 method: "POST",
+                headers,
+                credentials: "include",
                 signal: controller.signal,
             });
 
