@@ -42,7 +42,7 @@ class ResumeVersion(BaseModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     label: Mapped[str | None] = mapped_column(String(100))
     pdf_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    pdf_rendered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    pdf_rendered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     resume: Mapped["Resume"] = relationship(back_populates="versions")
