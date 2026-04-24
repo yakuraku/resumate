@@ -471,7 +471,7 @@ async def save_pdf_to_disk(
     # Fetch bytes once; used for both folder-save and streaming branches.
     pdf_bytes = await storage.get(current_user.id, key)
 
-    current = await svc.get_settings(db)
+    current = await svc.get_settings(db, current_user.id)
     if current.save_pdf_folder_enabled and current.save_pdf_folder_path:
         folder_root = Path(current.save_pdf_folder_path)
         if not folder_root.exists():

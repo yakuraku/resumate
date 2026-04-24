@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/axios';
+import { getCsrfToken } from '@/lib/csrf';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -60,9 +61,13 @@ class ChatService {
     signal?: AbortSignal,
   ): Promise<void> {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+    const csrfToken = await getCsrfToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
     const response = await fetch(`${apiBase}/chat/${chatId}/message/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
+      credentials: 'include',
       body: JSON.stringify({ content }),
       signal,
     });
