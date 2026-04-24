@@ -37,13 +37,25 @@ def _version_key(resume_id: str, version_number: int) -> str:
 
 
 async def _record_pdf_render(db: AsyncSession, version_id: str, storage_key: str) -> None:
-    """Persist the storage key + render time on the version row."""
-    result = await db.execute(select(ResumeVersion).where(ResumeVersion.id == version_id))
-    version = result.scalar_one_or_none()
-    if version:
-        version.pdf_path = storage_key  # stores the user-scoped key, not an absolute path
-        version.pdf_rendered_at = datetime.now(timezone.utc)
-        await db.commit()
+    """Persist the storage key + render time on the version row.
+
+    The PDF is already uploaded by the caller, so a metadata-write failure
+    here must not surface as a 500 on the preview request. Log and swallow
+    instead; the next GET will still find the cached object in storage.
+    """
+    try:
+        result = await db.execute(select(ResumeVersion).where(ResumeVersion.id == version_id))
+        version = result.scalar_one_or_none()
+        if version:
+            version.pdf_path = storage_key  # stores the user-scoped key, not an absolute path
+            version.pdf_rendered_at = datetime.now(timezone.utc)
+            await db.commit()
+    except Exception as e:
+        print(f"[PDF] Failed to record render metadata for version {version_id}: {e}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
 
 
 async def _render_and_store(
