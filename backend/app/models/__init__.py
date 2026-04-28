@@ -13,3 +13,4 @@ from .user import User
 from .master_resume import MasterResume
 from .context_file import ContextFile
 from .tailor_helper import TailorHelper
+from .access_code import AccessCode
