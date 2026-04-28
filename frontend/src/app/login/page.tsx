@@ -131,6 +131,13 @@ export default function LoginPage() {
             </div>
           </form>
         </div>
+
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Have an access code?{' '}
+          <a href="/signup" className="font-medium text-primary hover:underline">
+            Sign up
+          </a>
+        </p>
       </div>
     </div>
   );
