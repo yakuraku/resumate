@@ -22,6 +22,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, accessCode: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -54,6 +55,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push('/');
   }, [router]);
 
+  const signup = useCallback(async (email: string, password: string, accessCode: string) => {
+    const res = await apiClient.post<LoginResponse>('/auth/signup', {
+      email,
+      password,
+      access_code: accessCode,
+    });
+    setCsrfToken(res.data.csrf_token);
+    setUser(res.data.user);
+    router.push('/');
+  }, [router]);
+
   const logout = useCallback(async () => {
     try {
       // CSRF header is added automatically by the axios request interceptor
@@ -67,7 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );

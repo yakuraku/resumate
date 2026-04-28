@@ -9,11 +9,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  const isPublicPath = pathname === '/login' || pathname === '/signup';
+
   useEffect(() => {
-    if (!isLoading && !user && pathname !== '/login') {
+    if (!isLoading && !user && !isPublicPath) {
       router.replace('/login');
     }
-  }, [isLoading, user, pathname, router]);
+  }, [isLoading, user, isPublicPath, router]);
 
   // While auth is being resolved, show a centered spinner
   if (isLoading) {
@@ -24,8 +26,8 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // On the login page, always render children (avoids redirect loop)
-  if (pathname === '/login') {
+  // On public pages, always render children (avoids redirect loop)
+  if (isPublicPath) {
     return <>{children}</>;
   }
 
