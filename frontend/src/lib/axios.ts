@@ -33,17 +33,26 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Prevents multiple simultaneous session checks when concurrent requests all get 401
+let isCheckingSession = false;
+
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     const status = error.response?.status;
     const url: string = error.config?.url ?? '';
 
-    if (status === 401) {
-      // Avoid redirect loop: skip when the failing call is /me itself
-      const isAuthMe = url.includes('auth/me');
-      if (!isAuthMe) {
-        // Lazy import to avoid circular dep
+    if (status === 401 && !url.includes('auth/me') && !isCheckingSession) {
+      isCheckingSession = true;
+      try {
+        await apiClient.get('/auth/me');
+        // Session is still valid — the 401 was spurious (e.g. CSRF rotation, backend race).
+        // Refresh the cached CSRF token so the next mutating request succeeds.
+        const { clearCsrfToken, getCsrfToken } = await import('./csrf');
+        clearCsrfToken();
+        await getCsrfToken();
+      } catch {
+        // /auth/me also returned 401 — session is truly expired, redirect to login.
         import('./csrf').then(({ clearCsrfToken }) => clearCsrfToken());
         if (typeof window !== 'undefined') {
           try { localStorage.removeItem('rm_user'); } catch { /* ignore */ }
@@ -51,6 +60,8 @@ apiClient.interceptors.response.use(
             window.location.href = '/login';
           }
         }
+      } finally {
+        isCheckingSession = false;
       }
     }
 
