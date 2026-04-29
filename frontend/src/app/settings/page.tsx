@@ -6,6 +6,7 @@ import { CommandCenter } from "@/components/layout/CommandCenter";
 import { useTheme, type Theme } from "@/components/theme-provider";
 import { SettingsService, AppSettings, SettingsUpdate, PromptsData } from "@/services/settings.service";
 import { ApplicationService } from "@/services/application.service";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +82,7 @@ const SETTINGS_THEMES: Array<{
 const GALAXY_INCOMPATIBLE_THEMES: Theme[] = ["light", "pastel", "neutral"];
 
 export default function SettingsPage() {
+    const { user } = useAuth();
     const { theme, setTheme } = useTheme();
     const { enabled: bgEnabled, animationType, setEnabled: setBgEnabled, setAnimationType } = useBackgroundAnimation();
     const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -366,6 +368,19 @@ export default function SettingsPage() {
 
                     {/* ─────────── GENERAL TAB ─────────── */}
                     <TabsContent value="general" className="space-y-0">
+                        {/* Account */}
+                        <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
+                            <div className="md:w-1/3">
+                                <h3 className="text-base font-semibold">Account</h3>
+                                <p className="mt-1 text-sm text-muted-foreground">Your logged-in account.</p>
+                            </div>
+                            <div className="md:w-2/3 space-y-1">
+                                <Label>Email</Label>
+                                <p className="text-sm font-medium text-foreground">{user?.email ?? ""}</p>
+                                <p className="text-xs text-muted-foreground">The email address used to sign in. Cannot be changed here.</p>
+                            </div>
+                        </section>
+
                         {/* Profile */}
                         <section className="flex flex-col md:flex-row md:gap-12 gap-6 py-10 border-b border-border">
                             <div className="md:w-1/3">

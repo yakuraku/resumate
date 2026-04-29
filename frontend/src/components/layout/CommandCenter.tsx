@@ -11,19 +11,24 @@ import {
   User,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useAuth } from "@/context/AuthContext"
+import { SettingsService } from "@/services/settings.service"
 
 interface CommandCenterProps {
   children: React.ReactNode
-  /** When true, the main area becomes h-full overflow-hidden (for editor-style pages) */
+  /** When true, the main area becomes overflow-hidden (for editor-style pages) */
   fullHeight?: boolean
 }
 
 export function CommandCenter({ children, fullHeight = false }: CommandCenterProps) {
   const pathname = usePathname()
+  const { user, logout } = useAuth()
+
   // Desktop collapsed state persisted in localStorage
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window !== "undefined") {
@@ -33,14 +38,45 @@ export function CommandCenter({ children, fullHeight = false }: CommandCenterPro
   })
   // Mobile open/close
   const [mobileOpen, setMobileOpen] = React.useState(false)
+  // User menu (logout popup)
+  const [showUserMenu, setShowUserMenu] = React.useState(false)
+  const userMenuRef = React.useRef<HTMLDivElement>(null)
+  const [preferredName, setPreferredName] = React.useState<string>("")
+
+  React.useEffect(() => {
+    if (!user) return
+    SettingsService.get()
+      .then(s => setPreferredName(s.preferred_name ?? ""))
+      .catch(() => {})
+  }, [user?.id])
 
   const toggleCollapsed = () => {
+    setShowUserMenu(false)
     setCollapsed((prev) => {
       const next = !prev
       localStorage.setItem("sidebar-collapsed", String(next))
       return next
     })
   }
+
+  // Close user menu on click-outside or Escape
+  React.useEffect(() => {
+    if (!showUserMenu) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setShowUserMenu(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowUserMenu(false)
+    }
+    document.addEventListener("mousedown", onMouseDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [showUserMenu])
 
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -50,7 +86,9 @@ export function CommandCenter({ children, fullHeight = false }: CommandCenterPro
   ]
 
   return (
-    <div className="min-h-screen bg-background flex text-foreground">
+    // h-screen + overflow-hidden pins the layout to the viewport so the sidebar
+    // never scrolls with the page — the main content area scrolls independently.
+    <div className="h-screen overflow-hidden bg-background flex text-foreground">
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div
@@ -83,8 +121,8 @@ export function CommandCenter({ children, fullHeight = false }: CommandCenterPro
           )}
         </div>
 
-        {/* Nav items */}
-        <nav className={cn("p-2 space-y-1 flex-1", collapsed && "flex flex-col items-center")}>
+        {/* Nav items — overflow-y-auto keeps user section always visible if nav grows */}
+        <nav className={cn("p-2 space-y-1 flex-1 overflow-y-auto", collapsed && "flex flex-col items-center")}>
           {navItems.map((item) => {
             const isActive = pathname === item.href
             return (
@@ -107,20 +145,59 @@ export function CommandCenter({ children, fullHeight = false }: CommandCenterPro
           })}
         </nav>
 
-        {/* User + collapse toggle */}
-        <div className={cn(
-          "p-2 border-t border-border shrink-0 space-y-2"
-        )}>
-          {/* User card — hide when collapsed */}
+        {/* User + collapse toggle — shrink-0 keeps this pinned at the bottom */}
+        <div className="p-2 border-t border-border shrink-0 space-y-2">
+
+          {/* Expanded: clickable user card with logout dropdown */}
           {!collapsed && (
-            <div className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg border border-border">
-              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-border shrink-0">
+            <div ref={userMenuRef} className="relative">
+              {showUserMenu && (
+                <div className="absolute bottom-full left-0 right-0 mb-1 p-1 bg-card border border-border rounded-lg shadow-lg z-50">
+                  <button
+                    onClick={async () => { setShowUserMenu(false); await logout() }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+              <div
+                onClick={() => setShowUserMenu((v) => !v)}
+                className="flex items-center gap-3 px-3 py-2 bg-muted/30 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors select-none"
+              >
+                <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-border shrink-0">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="overflow-hidden">
+                  <p className="text-sm font-medium truncate">{preferredName || user?.email?.split("@")[0] || "Account"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Collapsed: user icon button with logout dropdown */}
+          {collapsed && (
+            <div ref={userMenuRef} className="relative flex justify-center">
+              {showUserMenu && (
+                <div className="absolute bottom-full left-0 mb-1 p-1 bg-card border border-border rounded-lg shadow-lg z-50 w-36">
+                  <button
+                    onClick={async () => { setShowUserMenu(false); await logout() }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+              <button
+                onClick={() => setShowUserMenu((v) => !v)}
+                title={preferredName || user?.email || "Account"}
+                className="w-10 h-10 rounded-full bg-accent flex items-center justify-center border border-border hover:bg-muted transition-colors"
+              >
                 <User className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="overflow-hidden">
-                <p className="text-sm font-medium truncate">User Name</p>
-                <p className="text-xs text-muted-foreground truncate">user@example.com</p>
-              </div>
+              </button>
             </div>
           )}
 
@@ -151,11 +228,11 @@ export function CommandCenter({ children, fullHeight = false }: CommandCenterPro
         <Menu className="h-5 w-5" />
       </Button>
 
-      {/* Main Content */}
-      <div className={cn("flex-1 flex flex-col min-w-0 bg-muted/10", fullHeight && "overflow-hidden h-screen")}>
+      {/* Main Content — overflow-hidden here so only the inner main scrolls */}
+      <div className="flex-1 flex flex-col min-w-0 bg-muted/10 overflow-hidden">
         <main className={cn(
           "flex-1 p-6 md:p-8 animate-in fade-in zoom-in-95 duration-300",
-          fullHeight ? "overflow-hidden h-full" : "overflow-y-auto"
+          fullHeight ? "overflow-hidden" : "overflow-y-auto"
         )}>
           {children}
         </main>
