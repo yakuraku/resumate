@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -9,6 +10,9 @@ from app.schemas.resume import ResumeUpdate
 from app.utils.filesystem import get_master_resume_path, read_file
 from app.services.tailor_service import tailor_service
 from app.models.application import Application
+
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
 
 
 class ResumeService:
@@ -227,7 +231,7 @@ class ResumeService:
         await db.commit()
         return pdf_path, version_number
 
-    async def tailor_resume(self, db: AsyncSession, resume_id: str, user_id: str | None = None) -> Resume:
+    async def tailor_resume(self, db: AsyncSession, resume_id: str, user_id: str | None = None, client: "LLMService | None" = None) -> Resume:
         """Tailor the resume with LLM. Creates a new version with source=ai_tailored."""
         stmt = select(Resume).where(Resume.id == resume_id).options(
             selectinload(Resume.application)
@@ -251,7 +255,10 @@ class ResumeService:
         from app.services.prompts import get_active_prompt
         active_system_prompt = await get_active_prompt(db, owner_user_id, "resume_tailoring")
 
+        if client is None:
+            raise HTTPException(status_code=500, detail="LLM client not provided to tailor_resume")
         tailored_yaml = await tailor_service.tailor_resume(
+            client,
             resume.yaml_content, resume.application.job_description,
             rules=rules, system_prompt=active_system_prompt,
         )

@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.services.interview_service import InterviewService
 from app.services.interview_simulator import InterviewSimulator
+from app.services.llm_service import LLMService
 from app.schemas.interview import (
     InterviewSessionSchema,
     InterviewCreate,
@@ -67,8 +68,9 @@ async def generate_questions(
     req: GenerateQuestionsRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
-    service = InterviewService(db, current_user.id)
+    service = InterviewService(db, current_user.id, llm_client=llm_client)
     try:
         questions = await service.generate_questions(session_id, num_questions=req.num_questions)
         return questions
@@ -85,9 +87,10 @@ async def submit_answer(
     answer_in: AnswerSubmit,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
-    service = InterviewService(db, current_user.id)
-    simulator = InterviewSimulator(db, current_user.id)
+    service = InterviewService(db, current_user.id, llm_client=llm_client)
+    simulator = InterviewSimulator(db, current_user.id, llm_client=llm_client)
     try:
         answer = await service.submit_answer(question_id, answer_in.answer_text)
         sim_result = await simulator.process_answer(answer.id)

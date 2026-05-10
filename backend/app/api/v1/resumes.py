@@ -12,13 +12,13 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.resume import Resume, ResumeVersion
 from app.models.user import User
 from app.schemas.resume import ResumeRead, ResumeUpdate, ResumeVersionRead, ResumeVersionCreate
 from app.services.resume_service import resume_service
 from app.services.rendercv_service import rendercv_service
-from app.services.llm_service import llm_service
+from app.services.llm_service import LLMService
 from app.services.binary_storage_service import get_binary_storage
 router = APIRouter()
 
@@ -223,8 +223,9 @@ async def tailor_resume(
     resume_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
-    tailored = await resume_service.tailor_resume(db, resume_id, current_user.id)
+    tailored = await resume_service.tailor_resume(db, resume_id, current_user.id, client=llm_client)
 
     key = _active_key(resume_id)
     print(f"[PDF] Re-rendering after tailor for {resume_id}...")
@@ -244,6 +245,7 @@ async def tailor_resume_stream(
     resume_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     """SSE endpoint for agentic resume tailoring. Streams progress events as JSON lines."""
     from app.services.agent_tailor_service import run_agentic_tailor
@@ -269,12 +271,13 @@ async def tailor_resume_stream(
     job_description = resume.application.job_description
     resume_id_str = str(resume.id)
     user_id = current_user.id
-    model = llm_service.default_model
+    model = llm_client.default_model
 
     async def event_generator():
         tailored_yaml = None
         try:
             async for event in run_agentic_tailor(
+                client=llm_client,
                 resume_yaml=original_yaml,
                 job_description=job_description,
                 rules=rules,

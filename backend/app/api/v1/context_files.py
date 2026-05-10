@@ -13,9 +13,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.services import text_storage_service
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -201,9 +202,9 @@ async def ingest_to_file(
     body: IngestRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     """Extract structured context via LLM and save as a user-scoped markdown file."""
-    from app.services.llm_service import llm_service
     from app.services.prompts import (
         CONTEXT_EXTRACTION_SYSTEM_PROMPT,
         CONTEXT_EXTRACTION_USER_PROMPT_TEMPLATE,
@@ -219,7 +220,7 @@ async def ingest_to_file(
         {"role": "system", "content": CONTEXT_EXTRACTION_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
-    response_json = await llm_service.get_completion(messages, json_mode=True)
+    response_json = await llm_client.get_completion(messages, json_mode=True)
 
     clean = response_json.strip()
     for prefix in ("```json", "```"):

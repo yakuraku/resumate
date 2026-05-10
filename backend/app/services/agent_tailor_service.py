@@ -16,10 +16,12 @@ Event shapes:
 
 import json
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, TYPE_CHECKING
 
-from app.services.llm_service import llm_service
 from app.services.prompts import AGENT_SYSTEM_PROMPT
+
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
 from app.services.rendercv_service import rendercv_service
 from app.utils.filesystem import get_context_folder, get_tailor_helper_path
 
@@ -169,6 +171,7 @@ def _append_learning_to_helper(helper_path: Path, reasoning: str, date: str) -> 
 
 
 async def run_agentic_tailor(
+    client: "LLMService",
     resume_yaml: str,
     job_description: str,
     rules: list[str],
@@ -211,7 +214,7 @@ async def run_agentic_tailor(
 
     for iteration in range(MAX_ITERATIONS):
         try:
-            result = await llm_service.get_completion_with_tools(
+            result = await client.get_completion_with_tools(
                 messages=messages,
                 tools=AGENT_TOOLS,
                 model=model,

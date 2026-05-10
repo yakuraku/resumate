@@ -1,3 +1,5 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException
@@ -6,10 +8,13 @@ from app.models.application_question import ApplicationQuestion
 from app.models.application import Application
 from app.models.resume import Resume
 from app.schemas.questions import QuestionCreate, QuestionUpdate
-from app.services.llm_service import llm_service
+from app.services.llm_service import truncate_text
 from app.services.prompts import APPLICATION_QA_USER_PROMPT_TEMPLATE, REFINE_ANSWER_SYSTEM_PROMPT, get_active_prompt
 from app.services.tailor_rule_service import tailor_rule_service
 from app.services import text_storage_service
+
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
 
 
 class QuestionsService:
@@ -82,7 +87,7 @@ class QuestionsService:
         return True
 
     async def generate_answer(
-        self, db: AsyncSession, user_id: str, question_id: str
+        self, db: AsyncSession, user_id: str, question_id: str, client: "LLMService"
     ) -> ApplicationQuestion:
         question, application = await self._load_question_owned(db, user_id, question_id)
 
@@ -125,12 +130,12 @@ class QuestionsService:
                     company=application.company,
                     job_description=application.job_description or "Not provided",
                     user_context=user_context or "No context available",
-                    resume_yaml=llm_service.truncate_text(resume_yaml, 2000),
+                    resume_yaml=truncate_text(resume_yaml, 2000),
                 ),
             },
         ]
 
-        answer_text = await llm_service.get_completion(
+        answer_text = await client.get_completion(
             messages=messages,
             temperature=0.6,
             max_tokens=1000,
@@ -144,7 +149,7 @@ class QuestionsService:
         return question
 
     async def refine_answer(
-        self, db: AsyncSession, user_id: str, question_id: str, instruction: str
+        self, db: AsyncSession, user_id: str, question_id: str, instruction: str, client: "LLMService"
     ) -> ApplicationQuestion:
         question, _ = await self._load_question_owned(db, user_id, question_id)
 
@@ -172,7 +177,7 @@ class QuestionsService:
             },
         ]
 
-        refined_text = await llm_service.get_completion(
+        refined_text = await client.get_completion(
             messages=messages,
             temperature=0.5,
             max_tokens=1000,
