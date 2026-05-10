@@ -193,7 +193,10 @@ class LLMService:
                     usage = data.get("usage", {})
                     if usage:
                         print(f"[LLM Tool Usage] Prompt: {usage.get('prompt_tokens')}, Completion: {usage.get('completion_tokens')}")
-                    choice = data["choices"][0]
+                    choices = data.get("choices") or []
+                    if not choices:
+                        raise ValueError(f"LLM returned empty choices list. Response: {str(data)[:400]}")
+                    choice = choices[0]
                     return {
                         "finish_reason": choice.get("finish_reason"),
                         "message": choice.get("message", {}),
