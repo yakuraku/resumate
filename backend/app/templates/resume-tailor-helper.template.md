@@ -81,20 +81,19 @@ design:
 ## Tailoring Workflow
 
 1. Call `read_tailor_helper()` -- you are doing this now
-2. Call `list_context_files()` -- see what personal context is available
-3. Read relevant files (always read `work_experience.md` if present; read project files relevant to the JD)
+2. Call `list_context_files()` -- read the content preview for each listed file
+3. Based on previews and JD keywords, read the files that cover work history and relevant projects — never request a file not in the listing
 4. Draft the tailored YAML using original resume + context + JD
 5. Call `validate_yaml(yaml_content)` -- fix any reported errors
 6. Call `submit_tailored_resume(yaml_content, reasoning)` -- only after validation passes
 
 ---
 
-## Keyword to Context File Routing
+## Keyword to File Routing
 
-When P1 or P2 keywords from the JD match skills in your context files, read those files
-before writing YAML. This section is personalised as the agent learns your background.
-
-Add entries here using this format as you discover which files cover which skills:
+When P1 or P2 keywords from the JD match skills covered in a particular context file,
+note that mapping here so future runs can skip the preview-scanning step for known skills.
+This section grows automatically as the agent learns your background.
 
 | JD Keywords | File to read |
 |---|---|
