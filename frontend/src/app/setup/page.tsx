@@ -351,11 +351,18 @@ function MasterResumeStep({
                     <div className="flex items-start gap-3">
                         <FileText className="h-5 w-5 text-muted-foreground mt-0.5 shrink-0" />
                         <div>
-                            <p className="text-sm font-medium text-foreground">Already placed your file?</p>
+                            <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-medium text-foreground">Already placed your file?</p>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium">
+                                    Self-hosted only
+                                </span>
+                            </div>
                             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                                If you placed <code className="bg-muted px-1 rounded text-xs">master-resume_CV.yaml</code> in
+                                For <strong>self-hosted / Docker</strong> deployments only: if you placed{" "}
+                                <code className="bg-muted px-1 rounded text-xs">master-resume_CV.yaml</code> in
                                 the <code className="bg-muted px-1 rounded text-xs">data/</code> folder on your host machine,
-                                click below to detect it.
+                                click below to detect it. If you are using the hosted version (Vercel + Render), use
+                                Upload or Paste instead.
                             </p>
                         </div>
                     </div>
@@ -431,8 +438,9 @@ function ContextFilesStep({
 }) {
     const [dragging, setDragging] = useState(false);
     const [uploading, setUploading] = useState(false);
-    const [uploadResult, setUploadResult] = useState<{ ok: boolean; msg: string } | null>(null);
+    const [uploadResult, setUploadResult] = useState<{ ok: boolean; info?: boolean; msg: string } | null>(null);
     const [fileCount, setFileCount] = useState<number | null>(null);
+    const [countLoading, setCountLoading] = useState(true);
     const fileRef = useRef<HTMLInputElement>(null);
 
     const refreshCount = useCallback(async () => {
@@ -440,7 +448,10 @@ function ContextFilesStep({
             const files = await contextFilesService.listFiles();
             setFileCount(files.length);
             if (files.length > 0) onStatusRefresh();
-        } catch { /* ignore */ }
+        } catch { /* keep count unchanged */ }
+        finally {
+            setCountLoading(false);
+        }
     }, [onStatusRefresh]);
 
     useEffect(() => { refreshCount(); }, [refreshCount]);
@@ -457,12 +468,24 @@ function ContextFilesStep({
         try {
             const { results } = await contextFilesService.uploadFiles(mdFiles);
             const created = results.filter((r: { status: string }) => r.status === "created").length;
+            const alreadyExisted = results.filter(
+                (r: { status: string; reason?: string }) => r.reason === "already exists"
+            ).length;
             setUploadResult({
                 ok: created > 0,
+                info: created === 0 && alreadyExisted > 0,
                 msg: created > 0
-                    ? `Uploaded ${created} file${created > 1 ? "s" : ""} successfully.`
-                    : "All files already exist in the folder.",
+                    ? `Uploaded ${created} file${created > 1 ? "s" : ""} successfully${alreadyExisted > 0 ? ` (${alreadyExisted} already existed)` : ""}.`
+                    : alreadyExisted > 0
+                        ? "All files are already in your context folder."
+                        : "No valid files were added.",
             });
+            if (created > 0) {
+                // Optimistically enable Continue without waiting for the listFiles round-trip.
+                // refreshCount() below will sync the accurate total from the server.
+                setFileCount((prev) => (prev ?? 0) + created);
+                onStatusRefresh();
+            }
             await refreshCount();
         } catch {
             setUploadResult({ ok: false, msg: "Upload failed. Check that the backend is running." });
@@ -566,11 +589,15 @@ function ContextFilesStep({
                     "flex items-start gap-2.5 rounded-xl px-4 py-3 text-sm border",
                     uploadResult.ok
                         ? "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400"
-                        : "bg-destructive/10 border-destructive/30 text-destructive"
+                        : uploadResult.info
+                            ? "bg-muted/40 border-border text-muted-foreground"
+                            : "bg-destructive/10 border-destructive/30 text-destructive"
                 )}>
                     {uploadResult.ok
                         ? <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                        : <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        : uploadResult.info
+                            ? <FileText className="h-4 w-4 shrink-0 mt-0.5" />
+                            : <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     }
                     {uploadResult.msg}
                 </div>
@@ -583,8 +610,16 @@ function ContextFilesStep({
                 >
                     Skip for now
                 </button>
-                <Button onClick={onNext} disabled={!alreadyDone && !(fileCount !== null && fileCount > 0)} className="gap-2">
-                    Continue <ChevronRight className="h-4 w-4" />
+                <Button
+                    onClick={onNext}
+                    disabled={!alreadyDone && (countLoading || !(fileCount !== null && fileCount > 0))}
+                    className="gap-2"
+                >
+                    {!alreadyDone && countLoading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Checking...</>
+                    ) : (
+                        <>Continue <ChevronRight className="h-4 w-4" /></>
+                    )}
                 </Button>
             </div>
         </div>
@@ -603,7 +638,7 @@ const PROVIDER_LABELS: Record<Provider, string> = {
 
 const PROVIDER_MODELS: Record<Provider, string> = {
     openai: "gpt-5-mini",
-    openrouter: "anthropic/claude-sonnet-4",
+    openrouter: "anthropic/claude-sonnet-4-5",
     gemini: "gemini-2.5-flash",
 };
 
