@@ -80,3 +80,17 @@ async def get_current_admin(current_user: User = Depends(get_current_user)) -> U
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return current_user
+
+
+async def get_llm_client(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Per-request LLM client built from the current user's settings.
+
+    This is the only correct way to obtain a client for an LLM call: it
+    captures credentials at request-start, so concurrent requests from
+    different users never share state.
+    """
+    from app.services.llm_service import build_llm_client, LLMService  # noqa: F401
+    return await build_llm_client(db, current_user.id)

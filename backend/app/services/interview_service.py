@@ -1,6 +1,6 @@
 import json
 from uuid import uuid4
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
@@ -8,17 +8,22 @@ from fastapi import HTTPException
 from app.models.interview import InterviewSession, InterviewQuestion, InterviewAnswer, InterviewType
 from app.models.application import Application
 from app.models.resume import Resume
-from app.services.llm_service import llm_service
 from app.services.prompts import (
     INTERVIEW_QUESTION_GENERATION_SYSTEM_PROMPT,
     INTERVIEW_QUESTION_GENERATION_USER_PROMPT_TEMPLATE,
 )
 
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
+
 
 class InterviewService:
-    def __init__(self, db: AsyncSession, user_id: str):
+    def __init__(self, db: AsyncSession, user_id: str, llm_client: Optional["LLMService"] = None):
         self.db = db
         self.user_id = user_id
+        # llm_client is only required for generate_questions(); endpoints that
+        # only manage sessions/questions can omit it.
+        self.llm_client = llm_client
 
     async def _assert_application_owned(self, application_id: str) -> Application:
         result = await self.db.execute(
@@ -160,7 +165,9 @@ class InterviewService:
             {"role": "user", "content": user_prompt},
         ]
 
-        response_json = await llm_service.get_completion(messages, json_mode=True)
+        if self.llm_client is None:
+            raise RuntimeError("InterviewService requires an llm_client to generate questions")
+        response_json = await self.llm_client.get_completion(messages, json_mode=True)
 
         clean_json = response_json.strip()
         if clean_json.startswith("```json"):

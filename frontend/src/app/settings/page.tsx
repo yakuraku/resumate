@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { aiRequestTracker } from "@/lib/aiRequestTracker";
 import { useBackgroundAnimation } from "@/hooks/useBackgroundAnimation";
 import { CommandCenter } from "@/components/layout/CommandCenter";
 import { useTheme, type Theme } from "@/components/theme-provider";
@@ -119,6 +120,15 @@ export default function SettingsPage() {
 
     const [sentryBackendStatus, setSentryBackendStatus] = useState<"idle" | "loading" | "sent" | "failed">("idle");
     const [sentryFrontendStatus, setSentryFrontendStatus] = useState<"idle" | "sent">("idle");
+
+    // Locks the AI provider/key/model controls while any LLM request is in
+    // flight, so the user can't change credentials mid-call. Reactive: as
+    // soon as the last in-flight request settles (success OR failure), the
+    // lock releases automatically.
+    const [aiRequestActive, setAiRequestActive] = useState(false);
+    useEffect(() => {
+        return aiRequestTracker.subscribe((active) => setAiRequestActive(active));
+    }, []);
 
     const handleGoToGlobalRules = useCallback(() => {
         setOpenPromptKey(null);
@@ -248,7 +258,20 @@ export default function SettingsPage() {
         return "llm_api_key_openai";
     };
 
+    const AI_LOCK_KEYS: ReadonlyArray<keyof SettingsUpdate> = [
+        "llm_provider",
+        "llm_api_key",
+        "llm_api_key_openai",
+        "llm_api_key_openrouter",
+        "llm_api_key_gemini",
+        "llm_model",
+    ];
+
     const handleChange = (key: keyof SettingsUpdate, value: string | boolean | number) => {
+        if (aiRequestActive && AI_LOCK_KEYS.includes(key)) {
+            showToast("Wait for the current AI request to finish before changing keys", "default");
+            return;
+        }
         setForm((prev) => {
             const next = { ...prev, [key]: value };
             // When provider switches, load that provider's stored key into llm_api_key
@@ -631,7 +654,15 @@ export default function SettingsPage() {
                                 <p className="mt-1 text-sm text-muted-foreground">Configure your AI provider and credentials. Falls back to .env if left empty.</p>
                             </div>
                             <div className="md:w-2/3 space-y-6">
-                                {!current.llm_api_key && (
+                                {aiRequestActive && (
+                                    <div className="flex items-start gap-3 rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/10 p-3">
+                                        <Loader2 className="h-4 w-4 text-blue-500 shrink-0 mt-0.5 animate-spin" />
+                                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                                            An AI request is in progress. You can change your provider, key, or model once it finishes.
+                                        </p>
+                                    </div>
+                                )}
+                                {!aiRequestActive && !current.llm_api_key && (
                                     <div className="flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3">
                                         <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                                         <p className="text-sm text-amber-700 dark:text-amber-300">
@@ -672,11 +703,14 @@ export default function SettingsPage() {
                                         ] as const).map((p) => (
                                             <button
                                                 key={p.id}
+                                                disabled={aiRequestActive}
                                                 onClick={() => {
                                                     handleChange("llm_provider", p.id);
                                                     setTestResult(null);
                                                 }}
                                                 className={`flex items-center gap-4 p-4 rounded-lg border text-left transition-all ${
+                                                    aiRequestActive ? "opacity-60 cursor-not-allowed" : ""
+                                                } ${
                                                     current.llm_provider === p.id
                                                         ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                                                         : "border-border hover:border-primary/40 hover:bg-muted/30"
@@ -718,6 +752,7 @@ export default function SettingsPage() {
                                             id="llm_api_key"
                                             type={showApiKey ? "text" : "password"}
                                             value={current.llm_api_key || ""}
+                                            disabled={aiRequestActive}
                                             onChange={(e) => { handleChange("llm_api_key", e.target.value); setTestResult(null); }}
                                             placeholder={
                                                 current.llm_provider === "openai" ? "sk-..." :
@@ -742,6 +777,7 @@ export default function SettingsPage() {
                                     <Input
                                         id="llm_model"
                                         value={current.llm_model || ""}
+                                        disabled={aiRequestActive}
                                         onChange={(e) => { handleChange("llm_model", e.target.value); setTestResult(null); }}
                                         placeholder={
                                             current.llm_provider === "openai" ? "gpt-5-mini" :
@@ -762,8 +798,9 @@ export default function SettingsPage() {
                                         ).map((m) => (
                                             <button
                                                 key={m}
+                                                disabled={aiRequestActive}
                                                 onClick={() => { handleChange("llm_model", m); setTestResult(null); }}
-                                                className="px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary border border-border text-xs font-mono transition-colors"
+                                                className={`px-2 py-0.5 rounded-md bg-muted hover:bg-primary/10 hover:text-primary border border-border text-xs font-mono transition-colors ${aiRequestActive ? "opacity-60 cursor-not-allowed hover:bg-muted hover:text-inherit" : ""}`}
                                             >
                                                 {m}
                                             </button>

@@ -40,9 +40,10 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # ----- Auth (Phase 1) -----
+    # AUTH_MODE=cloud enforces JWT cookie + CSRF (required for multi-user deployments).
     # AUTH_MODE=local bypasses auth entirely: every request resolves to the
-    # BOOTSTRAP_ADMIN user. AUTH_MODE=cloud enforces JWT cookie + CSRF.
-    AUTH_MODE: str = "local"
+    # BOOTSTRAP_ADMIN user. Set AUTH_MODE=local in .env for local/self-hosted use.
+    AUTH_MODE: str = "cloud"
     JWT_SECRET_KEY: str = "dev-insecure-change-me"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 10080  # 7 days

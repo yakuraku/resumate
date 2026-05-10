@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.schemas.chat import (
     ChatCreate,
@@ -12,6 +12,7 @@ from app.schemas.chat import (
     ChatConversationSummary,
 )
 from app.services import chat_service
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -76,9 +77,10 @@ async def send_message(
     body: ChatMessageRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     try:
-        return await chat_service.send_message(db, current_user.id, chat_id, body.content)
+        return await chat_service.send_message(db, current_user.id, chat_id, body.content, client=llm_client)
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
@@ -92,10 +94,11 @@ async def stream_message(
     body: ChatMessageRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     """SSE endpoint for streaming chat responses token by token."""
     try:
-        gen = await chat_service.stream_message(db, current_user.id, chat_id, body.content)
+        gen = await chat_service.stream_message(db, current_user.id, chat_id, body.content, client=llm_client)
     except ValueError as e:
         raise HTTPException(404, str(e))
     except Exception as e:
