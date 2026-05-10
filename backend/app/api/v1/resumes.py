@@ -368,10 +368,24 @@ async def tailor_resume_stream(
                 storage = get_binary_storage()
                 await storage.delete(user_id, key)
 
-                ok, err = await _render_and_store(user_id, key, tailored_yaml)
-                if ok:
-                    await new_db.refresh(new_version)
-                    await _record_pdf_render(new_db, str(new_version.id), key)
+                # Run render as a task so we can send heartbeats every 15s.
+                # RenderCV takes 5-15s normally; heartbeats guard against slow runs
+                # that would otherwise let Render's LB drop the idle SSE connection.
+                render_task = _asyncio.create_task(_render_and_store(user_id, key, tailored_yaml))
+                ok, err = False, ""
+                while True:
+                    try:
+                        ok, err = await _asyncio.wait_for(_asyncio.shield(render_task), timeout=15)
+                        break
+                    except _asyncio.TimeoutError:
+                        yield ": heartbeat\n\n"
+
+                if not ok:
+                    yield f"data: {_json.dumps({'type': 'error', 'message': f'PDF render failed after saving: {err[:300]}'})}\n\n"
+                    return
+
+                await new_db.refresh(new_version)
+                await _record_pdf_render(new_db, str(new_version.id), key)
 
                 final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str, user_id)
                 resume_data = ResumeRead.model_validate(final_resume)

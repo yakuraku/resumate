@@ -614,8 +614,8 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                         } else if (event.type === "error") {
                             setAgentError(true);
                         }
-                    } catch {
-                        // ignore parse errors
+                    } catch (parseErr) {
+                        console.error("[AgentSSE] Failed to parse event:", line.slice(0, 200), parseErr);
                     }
                 }
             }
