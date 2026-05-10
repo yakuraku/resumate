@@ -274,24 +274,61 @@ async def tailor_resume_stream(
     model = llm_client.default_model
 
     async def event_generator():
+        import asyncio as _asyncio
+
         tailored_yaml = None
+        # Run the agent in a background task so we can send SSE heartbeat comments
+        # every 20s while it's blocked on LLM calls. Render's load balancer drops
+        # idle connections after ~30-60s, so we must keep bytes flowing.
+        # SSE comment lines (": heartbeat") are invisible to EventSource.onmessage.
+        HEARTBEAT_INTERVAL = 20
+        _SENTINEL = object()
+
+        queue: _asyncio.Queue = _asyncio.Queue()
+
+        async def _drain():
+            try:
+                async for event in run_agentic_tailor(
+                    client=llm_client,
+                    resume_yaml=original_yaml,
+                    job_description=job_description,
+                    rules=rules,
+                    system_prompt=None,
+                    model=model,
+                ):
+                    await queue.put(event)
+            except Exception as exc:
+                await queue.put(exc)
+            finally:
+                await queue.put(_SENTINEL)
+
+        task = _asyncio.create_task(_drain())
         try:
-            async for event in run_agentic_tailor(
-                client=llm_client,
-                resume_yaml=original_yaml,
-                job_description=job_description,
-                rules=rules,
-                system_prompt=None,
-                model=model,
-            ):
+            while True:
+                try:
+                    item = await _asyncio.wait_for(queue.get(), timeout=HEARTBEAT_INTERVAL)
+                except _asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    yield f"data: {_json.dumps({'type': 'error', 'message': str(item)})}\n\n"
+                    return
+
+                event = item
                 yield f"data: {_json.dumps(event)}\n\n"
 
                 if event.get("type") == "complete":
                     tailored_yaml = event.get("yaml_content", "")
 
-        except Exception as e:
-            yield f"data: {_json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-            return
+        finally:
+            task.cancel()
+            try:
+                await task
+            except (_asyncio.CancelledError, Exception):
+                pass
 
         if not tailored_yaml:
             return
@@ -331,10 +368,24 @@ async def tailor_resume_stream(
                 storage = get_binary_storage()
                 await storage.delete(user_id, key)
 
-                ok, err = await _render_and_store(user_id, key, tailored_yaml)
-                if ok:
-                    await new_db.refresh(new_version)
-                    await _record_pdf_render(new_db, str(new_version.id), key)
+                # Run render as a task so we can send heartbeats every 15s.
+                # RenderCV takes 5-15s normally; heartbeats guard against slow runs
+                # that would otherwise let Render's LB drop the idle SSE connection.
+                render_task = _asyncio.create_task(_render_and_store(user_id, key, tailored_yaml))
+                ok, err = False, ""
+                while True:
+                    try:
+                        ok, err = await _asyncio.wait_for(_asyncio.shield(render_task), timeout=15)
+                        break
+                    except _asyncio.TimeoutError:
+                        yield ": heartbeat\n\n"
+
+                if not ok:
+                    yield f"data: {_json.dumps({'type': 'error', 'message': f'PDF render failed after saving: {err[:300]}'})}\n\n"
+                    return
+
+                await new_db.refresh(new_version)
+                await _record_pdf_render(new_db, str(new_version.id), key)
 
                 final_resume = await resume_service.get_resume_by_id(new_db, resume_id_str, user_id)
                 resume_data = ResumeRead.model_validate(final_resume)

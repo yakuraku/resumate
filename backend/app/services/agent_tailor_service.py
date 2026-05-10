@@ -211,6 +211,7 @@ async def run_agentic_tailor(
 
     consecutive_validation_failures = 0
     last_validation_error: str | None = None
+    last_validated_yaml: str | None = None  # Set on successful validate_yaml; cleared on failure
 
     for iteration in range(MAX_ITERATIONS):
         try:
@@ -240,9 +241,14 @@ async def run_agentic_tailor(
         messages.append(assistant_msg)
 
         if finish_reason == "stop" or not message.get("tool_calls"):
-            # LLM finished without calling submit — treat content as error
-            content = message.get("content") or "Agent stopped without submitting a resume."
-            yield {"type": "error", "message": content[:500]}
+            # LLM decided to stop without calling submit_tailored_resume.
+            # For reasoning models content may be None; give a generic message.
+            content = message.get("content")
+            error_msg = (
+                content[:500] if content
+                else "Agent stopped without submitting a resume. It may have exhausted reasoning tokens — try again."
+            )
+            yield {"type": "error", "message": error_msg}
             return
 
         # Process tool calls
@@ -250,10 +256,15 @@ async def run_agentic_tailor(
         for tc in tool_calls:
             fn = tc.get("function", {})
             tool_name = fn.get("name", "")
+            raw_arguments = fn.get("arguments", "{}")
             try:
-                args = json.loads(fn.get("arguments", "{}"))
+                args = json.loads(raw_arguments)
             except json.JSONDecodeError:
-                args = {}
+                yield {
+                    "type": "error",
+                    "message": f"Malformed tool arguments for '{tool_name}' (JSON decode error): {raw_arguments[:200]}",
+                }
+                return
 
             call_id = tc.get("id", f"call_{iteration}")
 
@@ -267,7 +278,25 @@ async def run_agentic_tailor(
             if tool_name == "submit_tailored_resume":
                 yaml_content = args.get("yaml_content", "")
                 reasoning = args.get("reasoning", "")
-                # Append learning to helper (brief, non-blocking)
+
+                if not yaml_content:
+                    yield {"type": "error", "message": "submit_tailored_resume called with empty yaml_content."}
+                    return
+
+                if last_validated_yaml is None:
+                    yield {
+                        "type": "error",
+                        "message": "submit_tailored_resume called without a prior successful validate_yaml. Call validate_yaml first.",
+                    }
+                    return
+
+                if yaml_content.strip() != last_validated_yaml.strip():
+                    yield {
+                        "type": "error",
+                        "message": "submit_tailored_resume YAML does not match the last validated YAML. Re-run validate_yaml on the final version before submitting.",
+                    }
+                    return
+
                 _append_learning_to_helper(helper_path, f"**{today}**: {reasoning}", today)
                 yield {"type": "complete", "yaml_content": yaml_content, "reasoning": reasoning}
                 return
@@ -296,9 +325,11 @@ async def run_agentic_tailor(
             # --- Validation guardrails ---
             if tool_name == "validate_yaml":
                 if meta.get("ok"):
+                    last_validated_yaml = args.get("yaml_content", "")
                     consecutive_validation_failures = 0
                     last_validation_error = None
                 else:
+                    last_validated_yaml = None
                     # Detect identical repeated error — agent is not making progress
                     if tool_result == last_validation_error:
                         yield {
