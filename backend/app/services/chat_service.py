@@ -1,11 +1,10 @@
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import AsyncGenerator, TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.chat_history import ChatHistory
 from app.models.application import Application
-from app.services.llm_service import LLMService
 from app.services.prompts import (
     QA_CHAT_GENERATE_SYSTEM_PROMPT,
     QA_CHAT_REWRITE_SYSTEM_PROMPT,
@@ -14,7 +13,8 @@ from app.services.prompts import (
 )
 from app.services.tailor_rule_service import tailor_rule_service
 
-llm_service = LLMService()
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
 
 
 async def _load_context(application: Application, db: AsyncSession, user_id: str) -> str:
@@ -116,7 +116,7 @@ async def delete_conversation(db: AsyncSession, user_id: str, chat_id: str):
         await db.commit()
 
 
-async def send_message(db: AsyncSession, user_id: str, chat_id: str, user_content: str):
+async def send_message(db: AsyncSession, user_id: str, chat_id: str, user_content: str, client: "LLMService"):
     result = await db.execute(
         select(ChatHistory).where(ChatHistory.id == chat_id)
     )
@@ -152,7 +152,7 @@ async def send_message(db: AsyncSession, user_id: str, chat_id: str, user_conten
     llm_messages.extend(messages)
     llm_messages.append({"role": "user", "content": user_content})
 
-    assistant_content = await llm_service.get_completion(
+    assistant_content = await client.get_completion(
         messages=llm_messages,
         temperature=0.6,
         max_tokens=1000,
@@ -171,7 +171,7 @@ async def send_message(db: AsyncSession, user_id: str, chat_id: str, user_conten
 
 
 async def stream_message(
-    db: AsyncSession, user_id: str, chat_id: str, user_content: str
+    db: AsyncSession, user_id: str, chat_id: str, user_content: str, client: "LLMService"
 ) -> AsyncGenerator[dict, None]:
     from sqlalchemy.orm import selectinload
     from app.database import SessionLocal
@@ -213,7 +213,7 @@ async def stream_message(
     async def _generator() -> AsyncGenerator[dict, None]:
         collected: list[str] = []
         try:
-            async for chunk in llm_service.stream_completion(
+            async for chunk in client.stream_completion(
                 messages=llm_messages, temperature=0.6
             ):
                 if chunk:

@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.schemas.questions import QuestionCreate, QuestionUpdate, QuestionResponse, RefineAnswerRequest
 from app.services.questions_service import questions_service
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -54,8 +55,9 @@ async def generate_answer(
     question_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
-    return await questions_service.generate_answer(db, current_user.id, question_id)
+    return await questions_service.generate_answer(db, current_user.id, question_id, client=llm_client)
 
 
 @router.post("/{question_id}/refine", response_model=QuestionResponse)
@@ -64,5 +66,6 @@ async def refine_answer(
     data: RefineAnswerRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
-    return await questions_service.refine_answer(db, current_user.id, question_id, data.instruction)
+    return await questions_service.refine_answer(db, current_user.id, question_id, data.instruction, client=llm_client)

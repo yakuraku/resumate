@@ -1,22 +1,27 @@
 
 import json
+from typing import TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models.interview import InterviewSession, InterviewQuestion, InterviewAnswer
 from app.models.application import Application
 from app.models.resume import Resume
-from app.services.llm_service import llm_service
 from app.services.prompts import (
     INTERVIEW_SIMULATION_SYSTEM_PROMPT,
     INTERVIEW_SIMULATION_USER_PROMPT_TEMPLATE
 )
 from app.services.interview_service import InterviewService
 
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
+
+
 class InterviewSimulator:
-    def __init__(self, db: AsyncSession, user_id: str):
+    def __init__(self, db: AsyncSession, user_id: str, llm_client: "LLMService"):
         self.db = db
         self.user_id = user_id
-        self.interview_service = InterviewService(db, user_id)
+        self.llm_client = llm_client
+        self.interview_service = InterviewService(db, user_id, llm_client=llm_client)
 
     async def process_answer(self, answer_id: str):
         """
@@ -80,7 +85,7 @@ class InterviewSimulator:
         ]
 
         # 3. Call LLM
-        response_json = await llm_service.get_completion(messages, json_mode=True)
+        response_json = await self.llm_client.get_completion(messages, json_mode=True)
         
         # Clean Clean JSON
         clean_json = response_json.strip()

@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
+import { aiRequestTracker, isAiRequest } from './aiRequestTracker';
 
 // In Docker the Next.js server proxies /api/v1/* to the backend container
 // (see next.config.ts rewrites). The browser calls the relative path so no
@@ -16,6 +17,12 @@ export const apiClient = axios.create({
 
 const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
 
+// Per-request flag set by the request interceptor and read by both the
+// fulfilled and rejected response interceptors. Storing it on the config
+// (rather than a side counter) guarantees that every increment is matched
+// by exactly one decrement, even across retries.
+type AiTrackedConfig = InternalAxiosRequestConfig & { __aiTracked?: boolean };
+
 apiClient.interceptors.request.use(
   async (config) => {
     const method = (config.method ?? '').toLowerCase();
@@ -28,17 +35,32 @@ apiClient.interceptors.request.use(
         config.headers['X-CSRF-Token'] = token;
       }
     }
+    if (isAiRequest(method, config.url)) {
+      (config as AiTrackedConfig).__aiTracked = true;
+      aiRequestTracker.begin();
+    }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+function endAiTrackingFor(config: AiTrackedConfig | undefined): void {
+  if (config && config.__aiTracked) {
+    config.__aiTracked = false;
+    aiRequestTracker.end();
+  }
+}
+
 // Prevents multiple simultaneous session checks when concurrent requests all get 401
 let isCheckingSession = false;
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    endAiTrackingFor(response.config as AiTrackedConfig);
+    return response;
+  },
   async (error) => {
+    endAiTrackingFor(error.config as AiTrackedConfig);
     const status = error.response?.status;
     const url: string = error.config?.url ?? '';
 

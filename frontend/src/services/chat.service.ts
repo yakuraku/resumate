@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/axios';
 import { getCsrfToken } from '@/lib/csrf';
+import { aiRequestTracker } from '@/lib/aiRequestTracker';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -64,58 +65,72 @@ class ChatService {
     const csrfToken = await getCsrfToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-    const response = await fetch(`${apiBase}/chat/${chatId}/message/stream`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify({ content }),
-      signal,
-    });
 
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `HTTP ${response.status}`);
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('No response body');
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let doneReceived = false;
+    aiRequestTracker.begin();
+    let trackingEnded = false;
+    const endTracking = () => {
+      if (!trackingEnded) {
+        trackingEnded = true;
+        aiRequestTracker.end();
+      }
+    };
 
     try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      const response = await fetch(`${apiBase}/chat/${chatId}/message/stream`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ content }),
+        signal,
+      });
 
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
 
-        for (const part of parts) {
-          if (!part.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(part.slice(6));
-            if (event.type === 'delta' && event.content) {
-              callbacks.onDelta(event.content);
-            } else if (event.type === 'done') {
-              doneReceived = true;
-              callbacks.onDone();
-            } else if (event.type === 'error') {
-              callbacks.onError(event.message || 'Unknown error');
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let doneReceived = false;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() ?? '';
+
+          for (const part of parts) {
+            if (!part.startsWith('data: ')) continue;
+            try {
+              const event = JSON.parse(part.slice(6));
+              if (event.type === 'delta' && event.content) {
+                callbacks.onDelta(event.content);
+              } else if (event.type === 'done') {
+                doneReceived = true;
+                callbacks.onDone();
+              } else if (event.type === 'error') {
+                callbacks.onError(event.message || 'Unknown error');
+              }
+            } catch {
+              // ignore malformed SSE lines
             }
-          } catch {
-            // ignore malformed SSE lines
           }
         }
-      }
-      // Stream ended without a "done" event (e.g. server closed connection early)
-      if (!doneReceived) {
-        callbacks.onError('Stream ended unexpectedly');
+        // Stream ended without a "done" event (e.g. server closed connection early)
+        if (!doneReceived) {
+          callbacks.onError('Stream ended unexpectedly');
+        }
+      } finally {
+        reader.releaseLock();
       }
     } finally {
-      reader.releaseLock();
+      endTracking();
     }
   }
 }

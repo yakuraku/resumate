@@ -538,6 +538,16 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
+        const { aiRequestTracker } = await import("@/lib/aiRequestTracker");
+        aiRequestTracker.begin();
+        let trackingEnded = false;
+        const endTracking = () => {
+            if (!trackingEnded) {
+                trackingEnded = true;
+                aiRequestTracker.end();
+            }
+        };
+
         try {
             const apiBase = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
             const { getCsrfToken } = await import("@/lib/csrf");
@@ -615,6 +625,7 @@ export default function ApplicationWorkspacePage({ params }: PageProps) {
                 setAgentError(true);
             }
         } finally {
+            endTracking();
             setTailoring(false);
             abortControllerRef.current = null;
         }

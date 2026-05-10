@@ -153,73 +153,7 @@ class SettingsService:
 
         await db.commit()
 
-        llm_keys = {"llm_api_key", "llm_api_key_openai", "llm_api_key_openrouter", "llm_api_key_gemini", "llm_provider", "llm_model"}
-        if llm_keys & update_dict.keys():
-            await self._refresh_llm_service(db, user_id)
-
         return await self.get_settings(db, user_id)
-
-    async def _refresh_llm_service(self, db: AsyncSession, user_id: str) -> None:
-        """Refresh the global llm_service with updated settings for a user."""
-        from app.services.llm_service import llm_service
-        from app.config import settings as app_settings
-        raw = await self._get_all_raw(db, user_id)
-
-        provider = raw.get("llm_provider", "openai")
-        model = raw.get("llm_model", "")
-
-        provider_key_map = {
-            "openai": "llm_api_key_openai",
-            "openrouter": "llm_api_key_openrouter",
-            "gemini": "llm_api_key_gemini",
-        }
-        api_key = raw.get(provider_key_map.get(provider, "llm_api_key"), "") or raw.get("llm_api_key", "")
-
-        if not api_key:
-            if app_settings.OPENAI_API_KEY:
-                api_key = app_settings.OPENAI_API_KEY
-                provider = "openai"
-                if not model:
-                    model = app_settings.OPENAI_MODEL
-            elif app_settings.OPENROUTER_API_KEY:
-                api_key = app_settings.OPENROUTER_API_KEY
-                provider = "openrouter"
-                if not model:
-                    model = app_settings.DEFAULT_MODEL
-            elif app_settings.GEMINI_API_KEY:
-                api_key = app_settings.GEMINI_API_KEY
-                provider = "gemini"
-                if not model:
-                    model = app_settings.GEMINI_MODEL
-
-        if not model:
-            model = PROVIDER_DEFAULT_MODELS.get(provider, "gpt-5-mini")
-
-        if api_key:
-            llm_service.api_key = api_key
-            llm_service.provider = provider
-            llm_service.default_model = model
-
-            if provider == "openai":
-                llm_service.base_url = "https://api.openai.com/v1/chat/completions"
-                llm_service.headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                }
-            elif provider == "gemini":
-                llm_service.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-                llm_service.headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                }
-            else:  # openrouter
-                llm_service.base_url = "https://openrouter.ai/api/v1/chat/completions"
-                llm_service.headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "HTTP-Referer": app_settings.APP_URL,
-                    "X-Title": app_settings.PROJECT_NAME,
-                    "Content-Type": "application/json",
-                }
 
     async def get_effective_api_key(self, db: AsyncSession, user_id: str) -> tuple[str, str, str]:
         """Returns (api_key, provider, model) using settings with .env fallback."""

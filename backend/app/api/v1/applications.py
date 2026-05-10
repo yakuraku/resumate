@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationListResponse, ApplicationUpdate, ColorUpdate, ApplicationDeleteResponse
 from app.schemas.resume import ResumeCreateRequest, ResumeRead
@@ -9,6 +9,7 @@ from app.schemas.resume_template import ApplicationStatusUpdate, ApplicationResu
 from app.services.application_service import ApplicationService
 from app.services.resume_service import resume_service
 from app.services.tailor_service import tailor_service
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -109,6 +110,7 @@ async def analyze_job_description(
     id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     service = ApplicationService(db, current_user.id)
     app = await service.get(id)
@@ -127,9 +129,9 @@ async def analyze_job_description(
         pass
 
     if resume_yaml:
-        return await tailor_service.analyze_job_with_resume(app.job_description, resume_yaml)
+        return await tailor_service.analyze_job_with_resume(llm_client, app.job_description, resume_yaml)
     else:
-        return await tailor_service.parse_job_description(app.job_description)
+        return await tailor_service.parse_job_description(llm_client, app.job_description)
 
 
 @router.patch("/{id}/status", response_model=ApplicationResponse)

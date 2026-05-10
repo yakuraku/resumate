@@ -235,20 +235,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[Startup] Storage seed failed: {e}")
 
-    # Restore LLM settings from DB so last-selected provider is active immediately.
-    try:
-        from sqlalchemy import select
-        from app.database import SessionLocal as AsyncSessionLocal
-        from app.services.settings_service import settings_service
-        from app.models.user import User
-        from app.config import settings
-        async with AsyncSessionLocal() as db:
-            email = settings.BOOTSTRAP_ADMIN_EMAIL.lower().strip()
-            user = (await db.execute(select(User).where(User.email == email))).scalar_one_or_none()
-            if user:
-                await settings_service._refresh_llm_service(db, user.id)
-    except Exception as e:
-        print(f"[Startup] Could not restore LLM settings from DB (using .env fallback): {e}")
+    # LLM clients are now built per-request from each user's settings, so
+    # there is nothing to "restore" at startup. Each request resolves its
+    # own credentials via the get_llm_client dependency.
 
     # Ensure the master ResumeTemplate row exists in the DB.
     try:

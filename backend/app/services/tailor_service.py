@@ -1,9 +1,9 @@
 
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
-from app.services.llm_service import llm_service
+from app.services.llm_service import truncate_text
 from app.services.prompts import (
     JOB_PARSING_SYSTEM_PROMPT,
     JOB_PARSING_USER_PROMPT_TEMPLATE,
@@ -12,6 +12,10 @@ from app.services.prompts import (
     RESUME_TAILORING_SYSTEM_PROMPT,
     RESUME_TAILORING_USER_PROMPT_TEMPLATE
 )
+
+if TYPE_CHECKING:
+    from app.services.llm_service import LLMService
+
 
 class TailorService:
     @staticmethod
@@ -28,7 +32,7 @@ class TailorService:
                 return match.group(1)
         return response
 
-    async def parse_job_description(self, job_text: str) -> Dict[str, Any]:
+    async def parse_job_description(self, client: "LLMService", job_text: str) -> Dict[str, Any]:
         """
         Analyzes the job description and returns structured data with keywords and summary.
         """
@@ -37,7 +41,7 @@ class TailorService:
             {"role": "user", "content": JOB_PARSING_USER_PROMPT_TEMPLATE.format(job_description_text=job_text)}
         ]
 
-        response = await llm_service.get_completion(
+        response = await client.get_completion(
             messages=messages,
             temperature=0.2,
             max_tokens=3000,
@@ -54,13 +58,13 @@ class TailorService:
                 "raw_response": response,
             }
 
-    async def analyze_job_with_resume(self, job_text: str, resume_yaml: str) -> Dict[str, Any]:
+    async def analyze_job_with_resume(self, client: "LLMService", job_text: str, resume_yaml: str) -> Dict[str, Any]:
         """
         Analyzes job description AND computes match scores against the resume.
         Returns categorized keywords with in_resume flags and overall/category scores.
         """
         # Step 1: Parse JD
-        jd_analysis = await self.parse_job_description(job_text)
+        jd_analysis = await self.parse_job_description(client, job_text)
         if "error" in jd_analysis:
             return jd_analysis
 
@@ -71,12 +75,12 @@ class TailorService:
                 "role": "user",
                 "content": JOB_ANALYSIS_WITH_RESUME_USER_PROMPT_TEMPLATE.format(
                     jd_analysis_json=json.dumps(jd_analysis, indent=2),
-                    resume_yaml=llm_service.truncate_text(resume_yaml, 2000),
+                    resume_yaml=truncate_text(resume_yaml, 2000),
                 )
             }
         ]
 
-        response = await llm_service.get_completion(
+        response = await client.get_completion(
             messages=messages,
             temperature=0.1,
             max_tokens=3000,
@@ -94,7 +98,7 @@ class TailorService:
             # Return JD analysis without match scores as fallback
             return jd_analysis
 
-    async def tailor_resume(self, resume_yaml: str, job_text: str, rules: list[str] | None = None, system_prompt: str | None = None) -> str:
+    async def tailor_resume(self, client: "LLMService", resume_yaml: str, job_text: str, rules: list[str] | None = None, system_prompt: str | None = None) -> str:
         """
         Tailors the resume YAML to match the job description.
         Returns the new YAML string.
@@ -140,7 +144,7 @@ class TailorService:
             )}
         ]
         
-        response = await llm_service.get_completion(
+        response = await client.get_completion(
             messages=messages,
             temperature=0.4, # Balanced creativity/precision
             json_mode=True

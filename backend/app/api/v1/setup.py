@@ -20,9 +20,10 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_llm_client
 from app.models.user import User
 from app.services.binary_storage_service import get_binary_storage
+from app.services.llm_service import LLMService
 
 router = APIRouter()
 
@@ -299,6 +300,7 @@ async def get_master_resume_pdf(current_user: User = Depends(get_current_user)):
 async def generate_resume_yaml(
     body: GenerateResumeRequest,
     current_user: User = Depends(get_current_user),
+    llm_client: LLMService = Depends(get_llm_client),
 ):
     """
     Call the configured LLM to draft (or fix) a master resume YAML.
@@ -307,9 +309,7 @@ async def generate_resume_yaml(
     On retry attempts (previous_yaml + previous_error provided) a targeted fix
     prompt is used so the LLM corrects only the structural issues.
     """
-    from app.services.llm_service import llm_service
-
-    if not llm_service.api_key:
+    if not llm_client.api_key:
         raise HTTPException(
             status_code=400,
             detail="No LLM API key is configured. Complete the AI Connection step first.",
@@ -329,7 +329,7 @@ async def generate_resume_yaml(
     ]
 
     try:
-        yaml_content = await llm_service.get_completion(
+        yaml_content = await llm_client.get_completion(
             messages=messages,
             temperature=0.2,   # low temperature for deterministic structured output
             max_tokens=4000,
