@@ -15,6 +15,7 @@ Event shapes:
 """
 
 import json
+import re
 from pathlib import Path
 from typing import AsyncGenerator, TYPE_CHECKING
 
@@ -30,7 +31,7 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "list_context_files",
-            "description": "Lists all available files in the user's personal context folder (my_info/). Returns filenames and sizes. Call this to understand what context is available before choosing what to read.",
+            "description": "Lists all available files in the user's personal context folder (my_info/). Returns filenames, sizes, and a content preview for each file. Read the previews to understand what each file covers before deciding which ones to read fully.",
             "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
@@ -113,10 +114,26 @@ def _execute_tool(name: str, args: dict, context_dir: Path, helper_path: Path) -
         files = sorted(context_dir.glob("*.md"))
         if not files:
             return "No context files found."
+        # Fewer files → more preview lines so the agent has richer context per file.
+        preview_line_count = 5 if len(files) >= 10 else 8
+        _separator_re = re.compile(r'^[-=*]{3,}$')
         lines = []
         for f in files:
             size_kb = f.stat().st_size / 1024
             lines.append(f"- {f.name} ({size_kb:.1f} KB)")
+            try:
+                raw_lines = f.read_text(encoding="utf-8").splitlines()
+                # Skip blank lines and pure separator lines (---, ===, ***) so
+                # the preview shows actual content rather than structural noise.
+                meaningful = [
+                    l for l in raw_lines
+                    if l.strip() and not _separator_re.match(l.strip())
+                ]
+                preview = meaningful[:preview_line_count]
+                if preview:
+                    lines.append("  " + "\n  ".join(preview))
+            except Exception:
+                pass
         return "\n".join(lines)
 
     elif name == "read_context_file":
@@ -306,8 +323,8 @@ async def run_agentic_tailor(
 
             # Build summary for the event
             if tool_name == "list_context_files":
-                line_count = tool_result.count("\n") + 1
-                summary = f"{line_count} files found"
+                file_count = sum(1 for l in tool_result.splitlines() if l.startswith("- "))
+                summary = f"{file_count} file{'s' if file_count != 1 else ''} found"
             elif tool_name == "read_context_file":
                 size_kb = len(tool_result.encode()) / 1024
                 summary = f"Read {size_kb:.1f} KB"
