@@ -274,24 +274,61 @@ async def tailor_resume_stream(
     model = llm_client.default_model
 
     async def event_generator():
+        import asyncio as _asyncio
+
         tailored_yaml = None
+        # Run the agent in a background task so we can send SSE heartbeat comments
+        # every 20s while it's blocked on LLM calls. Render's load balancer drops
+        # idle connections after ~30-60s, so we must keep bytes flowing.
+        # SSE comment lines (": heartbeat") are invisible to EventSource.onmessage.
+        HEARTBEAT_INTERVAL = 20
+        _SENTINEL = object()
+
+        queue: _asyncio.Queue = _asyncio.Queue()
+
+        async def _drain():
+            try:
+                async for event in run_agentic_tailor(
+                    client=llm_client,
+                    resume_yaml=original_yaml,
+                    job_description=job_description,
+                    rules=rules,
+                    system_prompt=None,
+                    model=model,
+                ):
+                    await queue.put(event)
+            except Exception as exc:
+                await queue.put(exc)
+            finally:
+                await queue.put(_SENTINEL)
+
+        task = _asyncio.create_task(_drain())
         try:
-            async for event in run_agentic_tailor(
-                client=llm_client,
-                resume_yaml=original_yaml,
-                job_description=job_description,
-                rules=rules,
-                system_prompt=None,
-                model=model,
-            ):
+            while True:
+                try:
+                    item = await _asyncio.wait_for(queue.get(), timeout=HEARTBEAT_INTERVAL)
+                except _asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+                    continue
+
+                if item is _SENTINEL:
+                    break
+                if isinstance(item, Exception):
+                    yield f"data: {_json.dumps({'type': 'error', 'message': str(item)})}\n\n"
+                    return
+
+                event = item
                 yield f"data: {_json.dumps(event)}\n\n"
 
                 if event.get("type") == "complete":
                     tailored_yaml = event.get("yaml_content", "")
 
-        except Exception as e:
-            yield f"data: {_json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-            return
+        finally:
+            task.cancel()
+            try:
+                await task
+            except (_asyncio.CancelledError, Exception):
+                pass
 
         if not tailored_yaml:
             return
