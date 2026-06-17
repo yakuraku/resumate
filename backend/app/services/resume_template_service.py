@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import select, func, desc, or_
+from sqlalchemy import select, func, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.resume_template import ResumeTemplate
@@ -63,15 +63,18 @@ def _template_to_detail(template: ResumeTemplate, apps: list[Application]) -> Re
 
 
 def _visible_clause(user_id: str):
-    """A template is visible to user_id if it is the master (user_id IS NULL, is_master=True)
-    or it is owned by the user."""
-    return or_(ResumeTemplate.user_id == user_id, ResumeTemplate.is_master == True)  # noqa: E712
+    """A template is visible to user_id only if it is owned by that user.
+    Masters are now per-user (user_id = owner's ID), so they are included naturally."""
+    return ResumeTemplate.user_id == user_id
 
 
-async def get_or_create_master(db: AsyncSession) -> ResumeTemplate:
-    """Master template is user-agnostic (user_id=NULL, is_master=True)."""
+async def get_or_create_master(db: AsyncSession, user_id: str) -> ResumeTemplate:
+    """Return the calling user's master template, creating it if it doesn't exist yet."""
     result = await db.execute(
-        select(ResumeTemplate).where(ResumeTemplate.is_master == True)  # noqa: E712
+        select(ResumeTemplate).where(
+            ResumeTemplate.is_master == True,  # noqa: E712
+            ResumeTemplate.user_id == user_id,
+        )
     )
     master = result.scalars().first()
     if master:
@@ -80,7 +83,7 @@ async def get_or_create_master(db: AsyncSession) -> ResumeTemplate:
     master_yaml = _read_master_yaml()
     master = ResumeTemplate(
         id=str(uuid.uuid4()),
-        user_id=None,
+        user_id=user_id,
         name="Master Resume",
         yaml_content=master_yaml,
         is_master=True,
@@ -90,10 +93,6 @@ async def get_or_create_master(db: AsyncSession) -> ResumeTemplate:
     await db.commit()
     await db.refresh(master)
     return master
-
-
-async def ensure_master_exists(db: AsyncSession) -> None:
-    await get_or_create_master(db)
 
 
 async def _count_linked_apps(db: AsyncSession, template_id: str, user_id: str) -> int:
@@ -111,6 +110,9 @@ async def get_all_templates(
     user_id: str,
     search: Optional[str] = None,
 ) -> list[ResumeTemplateResponse]:
+    # Lazily create the user's master if it doesn't exist yet (e.g. new users).
+    await get_or_create_master(db, user_id)
+
     query = select(ResumeTemplate).where(_visible_clause(user_id)).order_by(
         desc(ResumeTemplate.is_master),
         desc(ResumeTemplate.is_starred),
@@ -175,7 +177,7 @@ async def create_template(
     if data.yaml_content:
         yaml_content = data.yaml_content
     else:
-        master = await get_or_create_master(db)
+        master = await get_or_create_master(db, user_id)
         yaml_content = master.yaml_content
 
     template = ResumeTemplate(
@@ -200,13 +202,9 @@ async def update_template(
 ) -> ResumeTemplateDetailResponse:
     template = await _get_visible_template(db, template_id, user_id)
 
-    # Master is readonly to everyone.
-    if template.is_master:
-        raise HTTPException(status_code=403, detail="The master template cannot be modified.")
-
-    # Non-master but not owned by this user (should be filtered out already, guard anyway).
-    if template.user_id != user_id:
-        raise HTTPException(status_code=404, detail="ResumeTemplate not found")
+    # The master's identity relies on its name; renaming it is not allowed.
+    if template.is_master and data.name is not None and data.name != template.name:
+        raise HTTPException(status_code=403, detail="The master template cannot be renamed.")
 
     if data.name is not None and data.name != template.name:
         dup = await db.execute(
@@ -274,7 +272,7 @@ async def delete_template(
         )
 
     if draft_apps and force:
-        master = await get_or_create_master(db)
+        master = await get_or_create_master(db, user_id)
         for app in draft_apps:
             app.resume_template_id = master.id
         await db.flush()
@@ -299,10 +297,6 @@ async def quick_save_yaml(
     yaml_content: str,
 ) -> ResumeTemplateDetailResponse:
     template = await _get_visible_template(db, template_id, user_id)
-    if template.is_master:
-        raise HTTPException(status_code=403, detail="The master template cannot be modified.")
-    if template.user_id != user_id:
-        raise HTTPException(status_code=404, detail="ResumeTemplate not found")
 
     template.yaml_content = yaml_content
     await db.commit()
