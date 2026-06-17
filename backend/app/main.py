@@ -239,15 +239,7 @@ async def lifespan(app: FastAPI):
     # there is nothing to "restore" at startup. Each request resolves its
     # own credentials via the get_llm_client dependency.
 
-    # Ensure the master ResumeTemplate row exists in the DB.
-    try:
-        from app.database import SessionLocal as AsyncSessionLocal
-        from app.services.resume_template_service import ensure_master_exists
-        async with AsyncSessionLocal() as db:
-            await ensure_master_exists(db)
-        print("[Startup] Master ResumeTemplate ensured.")
-    except Exception as e:
-        print(f"[Startup] Could not ensure master ResumeTemplate: {e}")
+    # Masters are now per-user and created lazily on the user's first template list call.
 
     # Start the daily ghost detection background task.
     ghost_task = asyncio.create_task(_daily_ghost_job())

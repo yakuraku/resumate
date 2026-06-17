@@ -1,34 +1,90 @@
 # ResuMate Career OS
 
-> **The Ultimate AI-Powered Career Operating System**
+> **The Intelligent, Agentic Career Operating System**
 
-ResuMate is a comprehensive platform designed to streamline your job application process. It serves as a central hub for managing your professional identity, tailoring resumes to specific job descriptions using AI, and preparing for interviews.
+ResuMate is a modern career platform designed to automate, track, and optimize the entire job application lifecycle. Rather than relying on generic resume rewriting, ResuMate employs an agentic LLM architecture that dynamically cross-references a user's master resume data with their detailed, private career logs to generate tailored, factual, and impact-driven resumes. Output is compiled in real-time into publication-quality, ATS-friendly PDFs using RenderCV.
 
-## 🚀 Key Features
+## Product Highlights
 
-*   **Resume Tailoring Agent:** Automatically adapts your master resume (YAML) to match specific job descriptions using advanced LLMs.
-*   **Context-Aware:** intelligently uses your personal career history stored in `my_info/` to generate relevant and truthful resume content.
-*   **Live Preview:** Real-time PDF generation and preview of your tailored resume.
-*   **Modern Interface:** A sleek, responsive frontend built with Next.js and Tailwind CSS.
-*   **Interview Prep:** (In Progress) Intelligent interview simulator based on your resume and target job.
+*   **Agentic Resume Tailoring**: A context-aware agent scans your personal project journals, work experience diaries, and detailed skill descriptions to construct truthful, contextually relevant bullet points tailored specifically to the target job description.
+*   **Compile-Ready PDF Engine**: Integrated with `RenderCV` to compile YAML resume data directly into professionally formatted LaTeX-rendered PDFs, avoiding the visual inconsistencies of traditional HTML-to-PDF generators.
+*   **Unified Application Pipeline**: Track application progress, manage interview histories, store target job credentials, and store multiple tailored resume versions inside a single central dashboard.
+*   **Contextual Interview Simulator**: An interactive prep tool that analyzes both the job description and your tailored resume to simulate technical and behavioral interviews, matching the exact profile of the company.
+*   **Encrypted Secrets Vault**: User-provided API keys (OpenAI, Gemini, OpenRouter) are encrypted at rest using server-side Fernet symmetric encryption.
+*   **Dual-Mode Deployment**: Supports lightweight local runtimes via Docker Compose (SQLite and local file storage) as well as cloud-native production hosting (Neon Serverless Postgres, Cloudflare R2 object storage, Render, and Vercel).
 
-## 🛠️ Tech Stack
+## Architecture Overview
 
-### Backend
-*   **Framework:** [FastAPI](https://fastapi.tiangolo.com/) (Python 3.10+)
-*   **Database:** SQLite (via `aiosqlite`)
-*   **ORM:** SQLAlchemy + Alembic for migrations
-*   **Resume Generaton:** [RenderCV](https://github.com/mina-sami/rendercv)
-*   **AI/LLM:** OpenAI / Anthropic integration
+```mermaid
+graph TD
+    User([User]) <--> |Interacts| FE[Next.js Frontend]
+    FE <--> |API Calls / JWT / SSE| BE[FastAPI Backend]
+    
+    subgraph Data Layer
+        BE <--> |SQL Queries / RLS| DB[(Database: SQLite / Neon Postgres)]
+        BE <--> |Encrypted Keys| SEC[Fernet Encryptor]
+        BE <--> |PDF Artifacts| STO[(Storage: Local / Cloudflare R2)]
+    end
+
+    subgraph Orchestration & Compilation
+        BE --> |Query Context| RG[Agentic Retriever]
+        RG --> |Master Resume YAML & Markdown Files| LLM[LLM: GPT/Claude/Gemini]
+        LLM --> |Tailored YAML| RCV[RenderCV Engine]
+        RCV --> |LaTeX Compiler| PDF[Generated PDF Resume]
+        PDF --> STO
+    end
+```
+
+## Technology Stack
 
 ### Frontend
-*   **Framework:** [Next.js 16](https://nextjs.org/) (App Router)
-*   **Language:** TypeScript
-*   **Styling:** Tailwind CSS 4 + `tw-animate-css`
-*   **Icons:** Lucide React
-*   **Components:** Radix UI primitives
+*   **Next.js 16 (App Router) & TypeScript**: Modular, responsive layout optimized for user experience.
+*   **Tailwind CSS 4 & tw-animate-css**: Fluid design system utilizing rich dark modes, glassmorphism, and micro-interactions.
+*   **Radix UI & Lucide React**: Accessible, unstyled primitives for UI components paired with consistent iconography.
+*   **Axios with CSRF & HttpOnly Cookie Auth**: Secure API integrations with cross-origin cookie-based state.
 
-## 📂 Project Structure
+### Backend
+*   **FastAPI & Python 3.10+**: High-performance, asynchronous REST API structure.
+*   **SQLAlchemy ORM & Alembic Migrations**: Structured data mapping supporting Postgres and SQLite targets.
+*   **RenderCV Integration**: Professional YAML-to-PDF compiler.
+*   **Cryptography (Fernet)**: Symmetric encryption for encrypting sensitive user credentials at rest.
+*   **Postgres Row-Level Security (RLS)**: Fine-grained security policy layer enforcing data isolation between accounts.
+
+## Getting Started
+
+### Local Setup via Docker Compose (Quickest)
+
+1.  Clone the repository and enter the directory:
+    ```bash
+    git clone https://github.com/yakuraku/resumate.git
+    cd ResuMate
+    ```
+2.  Configure environment variables:
+    ```bash
+    cp backend/.env.example backend/.env
+    ```
+    Open `backend/.env` and insert your preferred LLM API keys (e.g., `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, or `GEMINI_API_KEY`).
+3.  Add your master resume:
+    ```bash
+    cp master-resume_CV.yaml.example master-resume_CV.yaml
+    ```
+    Update `master-resume_CV.yaml` with your personal details, project details, and experience history.
+4.  Launch the environment:
+    ```bash
+    docker compose up --build
+    ```
+    Once initialized, access the portal at `http://localhost:1235`. Complete configuration via the **Settings** page.
+
+### Cloud SaaS Infrastructure (Production)
+
+ResuMate is designed to scale to multiple users in a cloud-hosted environment:
+*   **Database**: Neon Serverless Postgres in a pooled setup to handle high concurrent client sessions.
+*   **Object Storage**: Cloudflare R2 bucket for low-latency, egress-free PDF storage.
+*   **Backend Hosting**: Render (Web Service) running the FastAPI container and executing RenderCV PDF compilation.
+*   **Frontend Hosting**: Vercel (Next.js client deployment).
+*   **Security & Multi-Tenancy**: Postgres Row-Level Security (RLS) ensures that all queries are scoped strictly to the authenticated user ID.
+
+## Project Structure
 
 ```bash
 ResuMate/
@@ -46,75 +102,5 @@ ResuMate/
 └── resume-tailor-helper.md # Prompt engineering context for the AI
 ```
 
-## ⚡ Getting Started
-
-### Prerequisites
-*   Python 3.10+
-*   Node.js 18+ & npm
-
-### 1. Backend Setup
-
-1.  Navigate to the backend directory:
-    ```bash
-    cd backend
-    ```
-2.  Create and activate a virtual environment:
-    ```bash
-    python -m venv venv
-    # Windows:
-    .\venv\Scripts\activate
-    # Mac/Linux:
-    source venv/bin/activate
-    ```
-3.  Install dependencies:
-    ```bash
-    pip install .
-    ```
-4.  Set up environment variables:
-    Create a `.env` file in the `backend/` directory:
-    ```ini
-    PROJECT_NAME="ResuMate Career OS"
-    API_V1_STR="/api/v1"
-    
-    # AI Provider Keys
-    OPENAI_API_KEY=your_openai_key_here
-    OPENAI_MODEL=gpt-5-mini
-    # OR
-    OPENROUTER_API_KEY=your_openrouter_key_here
-    DEFAULT_MODEL=anthropic/claude-sonnet-4
-    ```
-5.  Run Database Migrations:
-    ```bash
-    alembic upgrade head
-    ```
-6.  Start the Server:
-    ```bash
-    uvicorn app.main:app --reload --port 8921
-    ```
-    The API will be available at `http://localhost:8921`. Docs at `/docs`.
-
-### 2. Frontend Setup
-
-1.  Navigate to the frontend directory:
-    ```bash
-    cd frontend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  Start the Development Server:
-    ```bash
-    npm run dev
-    ```
-    The application will be running at `http://localhost:1234`.
-
-## 🧪 Development Workflow
-
-*   **Database:** The SQLite database is located at `backend/data/resumate.db`. Use Alembic for any schema changes.
-*   **Resume Data:** The `master-resume_CV.yaml` file in the root is the core data source. The backend reads this file to generate PDFs.
-*   **Personal Context:** Add markdown files to `my_info/` describing your projects, work experience, or skills. The Tailor Service reads all `.md` files in this directory to provide context to the LLM.
-    *   **Adding new context files:** Drop a `.md` file into `my_info/`, then add a corresponding entry in `my_info/projects.md` with a brief summary and a `**Relevant for:**` line so the AI agent knows when to read it.
-
-## 📝 License
+## License
 Proprietary - Internal Use Only.

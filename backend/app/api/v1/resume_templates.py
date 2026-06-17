@@ -2,8 +2,9 @@
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -21,6 +22,10 @@ from app.services.rendercv_service import rendercv_service
 from app.utils.filesystem import get_tailored_resumes_dir
 
 router = APIRouter()
+
+
+class _RenderPdfBody(BaseModel):
+    yaml_content: Optional[str] = None
 
 
 def _template_pdf_path(template_id: str) -> Path:
@@ -97,20 +102,34 @@ async def duplicate_resume_template(
 @router.post("/{template_id}/render-pdf")
 async def render_template_pdf(
     template_id: str,
+    body: Optional[_RenderPdfBody] = Body(None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Render a resume template to PDF.
+
+    If `yaml_content` is provided in the request body it is rendered directly
+    (live preview of unsaved edits). If omitted, the saved DB content is used.
+    Either way the template must be owned by the calling user.
+    """
     detail = await resume_template_service.get_template(db, current_user.id, template_id)
+
+    # Use caller-supplied YAML when present (live editor preview); fall back to DB.
+    provided = body.yaml_content.strip() if body and body.yaml_content else None
+    yaml_to_render = provided or detail.yaml_content
 
     output_path = _template_pdf_path(template_id)
     if output_path.exists():
         output_path.unlink()
 
-    success, log = await rendercv_service.render_yaml_to_pdf(detail.yaml_content, output_path)
+    success, log = await rendercv_service.render_yaml_to_pdf(yaml_to_render, output_path)
     if not success:
+        # Return the full RenderCV error (banner already stripped by the service)
+        # so the user can read the exact Location/Error table and copy it for
+        # debugging. Cap generously to avoid an unbounded response body.
         raise HTTPException(
             status_code=422,
-            detail=f"RenderCV failed: {log[:500]}",
+            detail=(log or "RenderCV failed to render the resume.").strip()[:6000],
         )
 
     return FileResponse(
