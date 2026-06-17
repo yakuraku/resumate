@@ -50,9 +50,14 @@ const GLOW_SHADOW_DIM = 'inset 0 1px 0 rgba(255,255,255,0.18), 0 0 40px rgba(45,
 const GLOW_SHADOW_BRIGHT = 'inset 0 1px 0 rgba(255,255,255,0.18), 0 0 70px rgba(45,212,191,0.22)';
 const GLOW_SHADOW_STATIC = 'inset 0 1px 0 rgba(255,255,255,0.18)';
 
+// Crossfade window (seconds) before a clip ends — the next clip is started and
+// faded in over this span so the viewer never sees the native-loop black frame.
+const CROSSFADE = 0.6;
+
 export default function AnimatedAuthShell({ children }: { children: React.ReactNode }) {
   const reduced = useReducedMotion() ?? false;
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoARef = useRef<HTMLVideoElement>(null);
+  const videoBRef = useRef<HTMLVideoElement>(null);
 
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
@@ -66,14 +71,60 @@ export default function AnimatedAuthShell({ children }: { children: React.ReactN
   const cardRotateY = useTransform(sx, (v) => v * 6);
   const cardRotateX = useTransform(sy, (v) => v * -6);
 
+  // Seamless loop via double-buffered crossfade. Two stacked <video> elements
+  // ping-pong: while the front clip plays out its final ~CROSSFADE seconds, the
+  // back clip restarts from 0 and fades in on top, so a frame is always painted.
   useEffect(() => {
-    const vid = videoRef.current;
-    if (!vid) return;
+    const a = videoARef.current;
+    const b = videoBRef.current;
+    if (!a || !b) return;
+
     if (reduced) {
-      vid.pause();
-    } else {
-      vid.play().catch(() => {});
+      a.pause();
+      b.pause();
+      a.style.opacity = '1';
+      b.style.opacity = '0';
+      return;
     }
+
+    let front = a;
+    let back = b;
+    let swapping = false;
+    let raf = 0;
+
+    a.style.opacity = '1';
+    b.style.opacity = '0';
+    b.pause();
+    a.currentTime = 0;
+    a.play().catch(() => {});
+
+    const tick = () => {
+      raf = requestAnimationFrame(tick);
+      const f = front;
+      if (!f.duration || Number.isNaN(f.duration)) return;
+      const remaining = f.duration - f.currentTime;
+
+      if (!swapping && remaining <= CROSSFADE) {
+        swapping = true;
+        back.currentTime = 0;
+        back.play().catch(() => {});
+        back.style.opacity = '1';
+        f.style.opacity = '0';
+      }
+
+      // Old front has reached its end — hand the baton over and reuse it as the
+      // next back buffer (reset happens when it is next promoted to front).
+      if (swapping && (f.ended || remaining <= 0.04)) {
+        f.pause();
+        const tmp = front;
+        front = back;
+        back = tmp;
+        swapping = false;
+      }
+    };
+    raf = requestAnimationFrame(tick);
+
+    return () => cancelAnimationFrame(raf);
   }, [reduced]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -87,24 +138,32 @@ export default function AnimatedAuthShell({ children }: { children: React.ReactN
       className="relative min-h-screen overflow-hidden bg-[#0a0a0a]"
       onMouseMove={handleMouseMove}
     >
-      {/* Layer 0: Video — scaled 110% so parallax shift never exposes edges */}
+      {/* Layer 0: Video — two stacked clips crossfaded for a seamless loop.
+          Scaled 110% so parallax shift never exposes edges. */}
       <motion.div
         className="pointer-events-none absolute inset-0 z-0"
         aria-hidden="true"
         style={reduced ? {} : { x: videoX, y: videoY }}
       >
         <video
-          ref={videoRef}
-          className="absolute inset-0 h-full w-full scale-110 object-cover"
-          autoPlay
+          ref={videoARef}
+          className="absolute inset-0 h-full w-full scale-110 object-cover transition-opacity duration-500 ease-linear"
+          style={{ opacity: 1 }}
           muted
-          loop
           playsInline
-          preload="metadata"
+          preload="auto"
         >
-          {/* bg_loop.mp4 is the ffmpeg-baked seamless loop; bg_video.mp4 is the fallback */}
-          <source src="/bg_loop.mp4" type="video/mp4" />
-          <source src="/bg_video.mp4" type="video/mp4" />
+          <source src="/seamless_bg.mp4" type="video/mp4" />
+        </video>
+        <video
+          ref={videoBRef}
+          className="absolute inset-0 h-full w-full scale-110 object-cover transition-opacity duration-500 ease-linear"
+          style={{ opacity: 0 }}
+          muted
+          playsInline
+          preload="auto"
+        >
+          <source src="/seamless_bg.mp4" type="video/mp4" />
         </video>
       </motion.div>
 

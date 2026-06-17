@@ -49,10 +49,12 @@ export const ResumeTemplateService = {
     return res.data
   },
 
-  async renderPdf(id: string): Promise<Blob> {
-    const res = await apiClient.post(`/resume-templates/${id}/render-pdf`, null, {
-      responseType: "blob",
-    })
+  async renderPdf(id: string, yamlContent?: string): Promise<Blob> {
+    const res = await apiClient.post(
+      `/resume-templates/${id}/render-pdf`,
+      yamlContent ? { yaml_content: yamlContent } : null,
+      { responseType: "blob" },
+    )
     return res.data as Blob
   },
 }

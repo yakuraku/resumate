@@ -12,6 +12,9 @@ import {
   AlertTriangle,
   Loader2,
   ChevronRight,
+  Save,
+  Copy,
+  Check,
 } from "lucide-react"
 import { CommandCenter } from "@/components/layout/CommandCenter"
 import { ResumeEditor } from "@/components/resume/ResumeEditor"
@@ -228,63 +231,175 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [pdfRendering, setPdfRendering] = useState(false)
+  const [renderError, setRenderError] = useState<string | null>(null)
+  const [errorCopied, setErrorCopied] = useState(false)
   const [masterBannerDismissed, setMasterBannerDismissed] = useState(false)
   const [hasUnsaved, setHasUnsaved] = useState(false)
   const [confirmClose, setConfirmClose] = useState(false)
   const [inlineName, setInlineName] = useState(template.name)
   const [editingName, setEditingName] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savedYamlRef = useRef(template.yaml_content)
+  // Always-current ref so renderPdf never closes over stale yaml state.
+  const yamlRef = useRef(yaml)
+  // Last YAML that was actually sent to the renderer — used to skip redundant
+  // auto-renders and to debounce the live preview against the editor content.
+  const lastRenderedYamlRef = useRef(template.yaml_content)
+  // Serialize renders so we never run two RenderCV subprocesses at once and
+  // never apply an out-of-order (stale) result.
+  const isRenderingRef = useRef(false)
+  const pendingRenderRef = useRef(false)
+  const previewDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Reset state when template changes
   useEffect(() => {
     setYaml(template.yaml_content)
     savedYamlRef.current = template.yaml_content
+    yamlRef.current = template.yaml_content
+    lastRenderedYamlRef.current = template.yaml_content
     setInlineName(template.name)
     setHasUnsaved(false)
     setSaveStatus("idle")
+    setRenderError(null)
   }, [template.id, template.yaml_content, template.name])
 
-  // Auto-save debounce
+  // Keep yamlRef in sync with the editor on every keystroke.
   useEffect(() => {
-    if (yaml === savedYamlRef.current) return
-    setHasUnsaved(true)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(async () => {
-      setSaveStatus("saving")
-      try {
-        const res = await ResumeTemplateService.saveYaml(template.id, yaml)
-        savedYamlRef.current = yaml
-        setHasUnsaved(false)
-        setSaveStatus("saved")
-        onSaved(res.updated_at, yaml)
-        // After auto-save, re-render PDF
-        renderPdf()
-        setTimeout(() => setSaveStatus("idle"), 2000)
-      } catch {
-        setSaveStatus("error")
-        showToast("Auto-save failed", "error")
-      }
-    }, 1500)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    yamlRef.current = yaml
+  }, [yaml])
+
+  // Track whether there are unsaved changes
+  useEffect(() => {
+    setHasUnsaved(yaml !== savedYamlRef.current)
+  }, [yaml])
+
+  // Manual save with validation
+  const handleSave = useCallback(async () => {
+    if (saveStatus === "saving") return
+    if (yaml.trim() === "") {
+      showToast("Resume content cannot be empty", "error")
+      return
+    }
+    setSaveStatus("saving")
+    try {
+      const res = await ResumeTemplateService.saveYaml(template.id, yaml)
+      savedYamlRef.current = yaml
+      setHasUnsaved(false)
+      setSaveStatus("saved")
+      onSaved(res.updated_at, yaml)
+      renderPdf()
+      setTimeout(() => setSaveStatus("idle"), 2000)
+    } catch {
+      setSaveStatus("error")
+      showToast("Save failed", "error")
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yaml, template.id])
+  }, [yaml, saveStatus, template.id])
+
+  // Ctrl+S / Cmd+S keyboard shortcut
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault()
+        handleSave()
+      }
+    }
+    document.addEventListener("keydown", handler)
+    return () => document.removeEventListener("keydown", handler)
+  }, [open, handleSave])
 
   const renderPdf = useCallback(async () => {
+    // Serialize: a RenderCV subprocess takes 5-15s. If one is already running,
+    // mark that another render is needed and bail — we'll converge to the
+    // latest editor content when the in-flight render finishes.
+    if (isRenderingRef.current) {
+      pendingRenderRef.current = true
+      return
+    }
+    isRenderingRef.current = true
     setPdfRendering(true)
+    // Capture the exact content we're rendering so the post-render bookkeeping
+    // (and stale-result detection) reasons about the right snapshot.
+    const renderedYaml = yamlRef.current
     try {
-      const blob = await ResumeTemplateService.renderPdf(template.id)
+      const blob = await ResumeTemplateService.renderPdf(template.id, renderedYaml)
       const url = URL.createObjectURL(blob)
+      setRenderError(null)
       setPdfUrl((prev) => {
         if (prev) URL.revokeObjectURL(prev)
         return url
       })
-    } catch {
-      showToast("PDF render failed", "error")
+    } catch (err: unknown) {
+      // The error body arrives as a Blob when responseType is "blob".
+      // Parse it so the user sees the actual RenderCV error instead of "{}".
+      // Keep the FULL error so it can be read and copied for debugging.
+      let fullError = "PDF render failed. Check your YAML syntax (see yaml_rules.md)."
+      try {
+        const responseBlob = (err as { response?: { data?: unknown } }).response?.data
+        if (responseBlob instanceof Blob) {
+          const text = await responseBlob.text()
+          const parsed = JSON.parse(text) as { detail?: string }
+          if (parsed.detail) fullError = String(parsed.detail)
+        }
+      } catch { /* ignore parse errors, keep fallback message */ }
+      setRenderError(fullError)
+      setErrorCopied(false)
+      showToast("PDF render failed — see the error in the preview pane", "error")
     } finally {
+      lastRenderedYamlRef.current = renderedYaml
+      isRenderingRef.current = false
       setPdfRendering(false)
+      // If the editor changed while this render was in flight, render again so
+      // the preview converges to the newest content.
+      if (pendingRenderRef.current) {
+        pendingRenderRef.current = false
+        if (yamlRef.current !== lastRenderedYamlRef.current) renderPdf()
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template.id, showToast])
+
+  const copyError = useCallback(async () => {
+    if (!renderError) return
+    try {
+      await navigator.clipboard.writeText(renderError)
+      setErrorCopied(true)
+      setTimeout(() => setErrorCopied(false), 2000)
+    } catch {
+      showToast("Could not copy to clipboard", "error")
+    }
+  }, [renderError, showToast])
+
+  const renderErrorPanel = () => (
+    <div className="absolute inset-0 z-20 flex flex-col bg-background">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b border-destructive/30 bg-destructive/5 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />
+          <span className="text-sm font-medium text-destructive truncate">
+            RenderCV could not build this resume
+          </span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={copyError}
+          className="h-7 px-2 text-xs gap-1 shrink-0"
+        >
+          {errorCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {errorCopied ? "Copied" : "Copy error"}
+        </Button>
+      </div>
+      <div className="flex-1 min-h-0 overflow-auto p-3">
+        <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-foreground/90 select-text">
+          {renderError}
+        </pre>
+      </div>
+      <div className="shrink-0 px-3 py-2 border-t border-border text-xs text-muted-foreground">
+        The <strong>Location</strong> column points to the section, entry number (starting at 0),
+        and field that is wrong. See <code>yaml_rules.md</code> for the full list of YAML rules.
+      </div>
+    </div>
+  )
 
   // Render PDF on open
   useEffect(() => {
@@ -294,6 +409,22 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // Auto-refresh the live preview ~2s after the user stops typing. This renders
+  // the current editor content WITHOUT saving (manual Save is unchanged). It
+  // skips when the content already matches what was last rendered, which also
+  // prevents a duplicate render right after the modal opens.
+  useEffect(() => {
+    if (!open) return
+    if (yaml === lastRenderedYamlRef.current) return
+    if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
+    previewDebounceRef.current = setTimeout(() => {
+      renderPdf()
+    }, 2000)
+    return () => {
+      if (previewDebounceRef.current) clearTimeout(previewDebounceRef.current)
+    }
+  }, [yaml, open, renderPdf])
 
   const handleClose = () => {
     if (hasUnsaved) {
@@ -363,6 +494,19 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
             </div>
             <div className="flex items-center gap-3">
               <SaveIndicator status={saveStatus} />
+              <Button
+                onClick={handleSave}
+                disabled={saveStatus === "saving" || !hasUnsaved}
+                size="sm"
+                className="gap-1.5"
+              >
+                {saveStatus === "saving" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                {saveStatus === "saving" ? "Saving…" : "Save"}
+              </Button>
               <button
                 onClick={handleClose}
                 className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -429,6 +573,7 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
                     <span className="text-sm text-muted-foreground">Rendering PDF…</span>
                   </div>
                 )}
+                {renderError && !pdfRendering && renderErrorPanel()}
                 {pdfUrl ? (
                   <iframe
                     src={pdfUrl}
@@ -469,6 +614,7 @@ function EditorModal({ template, open, onClose, onSaved, showToast }: EditorModa
                     <span className="text-sm text-muted-foreground">Rendering PDF…</span>
                   </div>
                 )}
+                {renderError && !pdfRendering && renderErrorPanel()}
                 {pdfUrl ? (
                   <iframe src={pdfUrl} className="w-full flex-1 border-0" title="PDF Preview" />
                 ) : (
